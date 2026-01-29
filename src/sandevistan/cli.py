@@ -36,6 +36,7 @@ from .ingestion import (
 )
 from .models import BLEMeasurement, Detection, MmWaveMeasurement, TrackState, WiFiMeasurement
 from .ingestion.ble import BLEAdvertisementScanner
+from .ingestion.ble_scanner import BleakScannerAdapter, BleakScannerConfig
 from .pipeline import FusionPipeline
 from .retention import RetentionScheduler
 from .sync import SynchronizationBuffer
@@ -124,6 +125,30 @@ class _BleStaticSource:
         self._next_scan_time = now + self._scan_interval_seconds
         try:
             return self._scanner.fetch()
+        except Exception as exc:  # pragma: no cover - adapter failures
+            LOGGER.exception("BLE source '%s' failed: %s", self._adapter_name, exc)
+            return []
+
+
+class _BleScannerSource:
+    def __init__(
+        self,
+        adapter: BleakScannerAdapter,
+        scan_interval_seconds: float,
+        adapter_name: str,
+    ) -> None:
+        self._adapter = adapter
+        self._scan_interval_seconds = max(scan_interval_seconds, 0.0)
+        self._adapter_name = adapter_name
+        self._next_scan_time = 0.0
+
+    def fetch(self) -> Sequence[BLEMeasurement]:
+        now = time.time()
+        if now < self._next_scan_time:
+            return []
+        self._next_scan_time = now + self._scan_interval_seconds
+        try:
+            return self._adapter.fetch()
         except Exception as exc:  # pragma: no cover - adapter failures
             LOGGER.exception("BLE source '%s' failed: %s", self._adapter_name, exc)
             return []
@@ -617,28 +642,64 @@ def _parse_ble_sources(payload: Sequence[object]) -> Optional[_MultiBleSource]:
     for idx, entry in enumerate(payload):
         entry_map = _require_mapping(entry, f"ingestion.ble_sources[{idx}]")
         source_type = str(entry_map.get("type", "static"))
-        if source_type != "static":
-            raise ValueError(f"Unsupported BLE source type: {source_type}")
         scan_interval_seconds = _require_float(
             entry_map.get("scan_interval_seconds", 1.0),
             "ble_source.scan_interval_seconds",
         )
         adapter_name = str(entry_map.get("adapter_name", f"ble_scanner_{idx}"))
-        raw_measurements = _require_sequence(
-            entry_map.get("measurements", []),
-            "ble_source.measurements",
-        )
-        normalized_measurements = [
-            _require_mapping(item, f"ble_source.measurements[{item_idx}]")
-            for item_idx, item in enumerate(raw_measurements)
-        ]
-        adapters.append(
-            _BleStaticSource(
-                normalized_measurements,
-                scan_interval_seconds=scan_interval_seconds,
-                adapter_name=adapter_name,
+        if source_type == "static":
+            raw_measurements = _require_sequence(
+                entry_map.get("measurements", []),
+                "ble_source.measurements",
             )
-        )
+            normalized_measurements = [
+                _require_mapping(item, f"ble_source.measurements[{item_idx}]")
+                for item_idx, item in enumerate(raw_measurements)
+            ]
+            adapters.append(
+                _BleStaticSource(
+                    normalized_measurements,
+                    scan_interval_seconds=scan_interval_seconds,
+                    adapter_name=adapter_name,
+                )
+            )
+        elif source_type == "bleak":
+            adapter_settings = _require_mapping(
+                entry_map.get("adapter_settings", {}),
+                "ble_source.adapter_settings",
+            )
+            offline_payloads = _require_sequence(
+                adapter_settings.get("offline_payloads", []),
+                "ble_source.adapter_settings.offline_payloads",
+            )
+            normalized_offline_payloads = [
+                _require_mapping(item, f"ble_source.adapter_settings.offline_payloads[{item_idx}]")
+                for item_idx, item in enumerate(offline_payloads)
+            ]
+            resolved_adapter_name = str(
+                adapter_settings.get("adapter_name", adapter_name)
+            )
+            adapter_config = BleakScannerConfig(
+                adapter_name=resolved_adapter_name,
+                scan_timeout_seconds=_require_float(
+                    adapter_settings.get("scan_timeout_seconds", 2.0),
+                    "ble_source.adapter_settings.scan_timeout_seconds",
+                ),
+                offline=bool(adapter_settings.get("offline", False)),
+                offline_payloads=normalized_offline_payloads,
+                include_hashed_identifier=bool(
+                    adapter_settings.get("include_hashed_identifier", True)
+                ),
+            )
+            adapters.append(
+                _BleScannerSource(
+                    BleakScannerAdapter(adapter_config),
+                    scan_interval_seconds=scan_interval_seconds,
+                    adapter_name=resolved_adapter_name,
+                )
+            )
+        else:
+            raise ValueError(f"Unsupported BLE source type: {source_type}")
     if not adapters:
         return None
     return _MultiBleSource(adapters)

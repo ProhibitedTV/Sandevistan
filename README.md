@@ -84,9 +84,13 @@ track updates as NDJSON (one JSON object per track update).
        ],
        "ble_sources": [
          {
-           "type": "static",
+           "type": "bleak",
            "adapter_name": "ble-scanner-01",
-           "scan_interval_seconds": 1.0
+           "scan_interval_seconds": 1.0,
+           "adapter_settings": {
+             "scan_timeout_seconds": 2.0,
+             "include_hashed_identifier": true
+           }
          }
        ]
      },

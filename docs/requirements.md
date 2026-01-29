@@ -100,8 +100,9 @@ Operational constraints:
 
 ## CLI configuration (BLE sources)
 When using the fusion CLI, BLE scanners are configured under `ingestion.ble_sources` in the JSON
-config file. The CLI accepts BLE source entries with a `type`, `adapter_name`, and
-`scan_interval_seconds` to control how often a scanner should emit advertisements:
+config file. Each BLE source entry includes a `type`, `adapter_name`, and
+`scan_interval_seconds` (poll rate). Use `type: "static"` to emit from prerecorded payloads, or
+`type: "bleak"` to scan using the Bleak adapter and an `adapter_settings` block:
 
 ```json
 {
@@ -110,7 +111,21 @@ config file. The CLI accepts BLE source entries with a `type`, `adapter_name`, a
       {
         "type": "static",
         "adapter_name": "ble-scanner-01",
-        "scan_interval_seconds": 1.0
+        "scan_interval_seconds": 1.0,
+        "measurements": [
+          {"timestamp": 1700000000.0, "rssi": -42, "device_id": "demo-tag-01"}
+        ]
+      },
+      {
+        "type": "bleak",
+        "adapter_name": "ble-scanner-01",
+        "scan_interval_seconds": 2.0,
+        "adapter_settings": {
+          "scan_timeout_seconds": 1.5,
+          "include_hashed_identifier": true,
+          "offline": false,
+          "offline_payloads": []
+        }
       }
     ]
   }
