@@ -2,6 +2,7 @@
 
 from .audit import AuditLogger, ConsentError, ConsentStatus, InMemoryConsentStore
 from .config import RetentionConfig, SensorConfig, SpaceConfig
+from .display import LiveTrackerDisplay, render_from_stream
 from .models import Detection, FusionInput, TrackState, WiFiMeasurement
 from .pipeline import FusionPipeline
 from .retention import RetentionScheduler
@@ -24,4 +25,6 @@ __all__ = [
     "SyncBatch",
     "SyncStatus",
     "SynchronizationBuffer",
+    "LiveTrackerDisplay",
+    "render_from_stream",
 ]

@@ -15,10 +15,15 @@ This repository contains an early-stage prototype framework inspired by the *San
 - `docs/requirements.md`: Product requirements and performance targets.
 - `docs/architecture.md`: System architecture and data flow.
 - `docs/ethics-policy.md`: Ethics and permissible use policy.
+- `docs/display.md`: Live tracker display consumer instructions.
 - `src/sandevistan/`: Prototype Python scaffolding for the pipeline.
 
 ## Quick start (prototype only)
 This repository is a scaffold. The modules include interfaces and placeholders for actual sensor integrations.
+
+### Live tracker display
+The repository includes a minimal CLI renderer that consumes tracker output updates and displays
+a live list + floor-plan placeholder. See `docs/display.md` for launch and piping instructions.
 
 ## Ethics and legal compliance
 Please read and comply with `docs/ethics-policy.md` before any development or deployment.
