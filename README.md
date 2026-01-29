@@ -118,6 +118,10 @@ track updates as NDJSON (one JSON object per track update).
    sandevistan-cli --config path/to/config.json
    ```
 
+   BLE scanning on Linux typically requires BlueZ with permission to access the Bluetooth
+   adapter (for example, running with `cap_net_admin,cap_net_raw` or adding the service
+   user to the `bluetooth` group).
+
 3. Consume NDJSON output (for example, pipe to the live display):
    ```bash
    sandevistan-cli --config path/to/config.json | python -m sandevistan.display
