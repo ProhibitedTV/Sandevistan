@@ -104,8 +104,13 @@ driver/firmware does not expose CSI, only RSSI will be available.
 
 Operational constraints:
 - Requires Linux with `iw` and `nl80211` support.
-- Interfaces may need monitor mode or elevated permissions (`cap_net_admin`) depending on the
-  adapter/driver; NetworkManager or wpa_supplicant may need to release the interface for scans.
+- Interfaces may need monitor mode or elevated permissions (`cap_net_admin`, and sometimes
+  `cap_net_raw`) depending on the adapter/driver; NetworkManager or wpa_supplicant may need to
+  release the interface for scans.
+- For non-root operation, grant capabilities to the capture process (or Python interpreter), for
+  example: `sudo setcap 'cap_net_admin,cap_net_raw+eip' /path/to/venv/bin/python`.
+- Some drivers expose scan results only to privileged users or when the interface is in a
+  managed/monitor state; validate driver behavior during deployment planning.
 - CSI collection often requires patched firmware/drivers and is vendor-specific; verify support
   before deployment. Commonly supported chipsets include Intel 5300 (CSI Tool), Atheros 9k CSI,
   and Broadcom BCM43xx/Nexmon-derived stacks.
