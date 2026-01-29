@@ -38,7 +38,7 @@ This repository is a scaffold. The modules include interfaces and placeholders f
 The `sandevistan-cli` entrypoint runs ingestion adapters, synchronization, and fusion, and emits
 track updates as NDJSON (one JSON object per track update).
 
-1. Create a JSON config file:
+1. Create a JSON config file (Wi-Fi + vision + BLE + mmWave serial example):
    ```json
    {
      "space": {
@@ -80,6 +80,14 @@ track updates as NDJSON (one JSON object per track update).
            "type": "http",
            "endpoint_url": "http://10.0.0.6:8081/vision/detections",
            "default_camera_id": "cam-01"
+         }
+       ],
+       "mmwave_sources": [
+         {
+           "type": "serial",
+           "port": "/dev/ttyUSB0",
+           "baudrate": 115200,
+           "default_sensor_id": "mmwave-01"
          }
        ],
        "ble_sources": [
