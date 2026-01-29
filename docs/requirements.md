@@ -29,6 +29,11 @@ This project targets **indoor localization and tracking** of consenting particip
 - All processing must be on-device or within a trusted local network.
 - Data retention must be minimized and configurable.
 - Clear opt-in consent is required for all tracked participants.
+- Wi-Fi-based motion detection is opportunistic and highly environment-dependent; expect degraded
+  performance in crowded RF environments, when access point geometry is poor, or when CSI/RSSI
+  sampling rates are low.
+- Wi-Fi motion cues generally cannot distinguish multiple people in close proximity without
+  additional sensors and should not be treated as a reliable identity signal.
 - mmWave sensors may provide coarse range/angle estimates and can be impacted by multipath
   reflections or occlusions; treat mmWave signals as corroborating evidence rather than a
   precise localization source.
@@ -36,6 +41,9 @@ This project targets **indoor localization and tracking** of consenting particip
   connections, and measurements are limited to nearby devices advertising on channels
   37–39. RSSI values can fluctuate due to interference, body absorption, and antenna
   orientation, so BLE data should be treated as a coarse proximity signal.
+- BLE emitter location is only approximate; room-scale proximity is typical, and precise
+  positioning generally requires dense receiver placement, frequent advertisements, and
+  favorable RF conditions.
 
 ## Data retention defaults
 - Retention is **disabled by default** and must be explicitly enabled.
