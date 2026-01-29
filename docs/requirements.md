@@ -87,6 +87,11 @@ Alternatively, add the service user to the `bluetooth` group if your distro gate
 via group permissions, but capabilities are still recommended for consistent access across
 BlueZ versions.
 
+Runtime notes:
+- The BlueZ service must be running (with D-Bus access available to the scanner process).
+- When containerized, mount `/var/run/dbus` and expose the Bluetooth device nodes so Bleak
+  can reach BlueZ.
+
 ## Local Wi-Fi capture requirements
 Local Wi-Fi capture relies on Linux `nl80211` tooling and compatible NIC/driver support. The
 default implementation uses `iw dev <iface> scan` to read RSSI values; ensure the interface is

@@ -49,6 +49,33 @@ def test_ble_scanner_offline_payload_requires_identifier() -> None:
         raise AssertionError("Expected adapter to reject missing device identifier")
 
 
+def test_ble_scanner_offline_payload_accepts_hashed_identifier_only() -> None:
+    config = BleakScannerConfig(
+        adapter_name="offline-adapter",
+        offline=True,
+        offline_payloads=[
+            {
+                "timestamp": 1720000100.0,
+                "rssi": -52,
+                "hashed_identifier": "hash-only-device",
+                "manufacturer_data": b"\x01\x02",
+            }
+        ],
+        include_hashed_identifier=False,
+    )
+    adapter = BleakScannerAdapter(config)
+
+    raw_payloads = adapter.scan()
+    measurements = parse_ble_measurements(raw_payloads)
+
+    assert len(measurements) == 1
+    measurement = measurements[0]
+    assert measurement.device_id is None
+    assert measurement.hashed_identifier == "hash-only-device"
+    assert measurement.rssi == -52.0
+    assert measurement.manufacturer_data == {"raw_hex": "0102"}
+
+
 def test_ble_scanner_discovery_raw_payload_normalizes() -> None:
     config = BleakScannerConfig(adapter_name="bleak-adapter")
     adapter = BleakScannerAdapter(config)
