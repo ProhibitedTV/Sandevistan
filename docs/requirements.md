@@ -53,6 +53,23 @@ adapter. The recommended capabilities for a non-root process are:
 - `cap_net_raw`: required to open raw Bluetooth sockets.
 - `cap_net_admin`: required by some adapters to configure scan parameters.
 
+## Local Wi-Fi capture requirements
+Local Wi-Fi capture relies on Linux `nl80211` tooling and compatible NIC/driver support. The
+default implementation uses `iw dev <iface> scan` to read RSSI values; ensure the interface is
+enabled and has permission to perform active scans.
+
+For CSI capture you **must** use a CSI-capable NIC/driver stack (for example, Intel 5300 CSI
+Tool, Atheros CSI, or Nexmon/BCM4358-derived firmware). The CSI capture command should emit
+numerical CSI values (for example, JSON with a `csi` array) and, optionally, timestamps. If the
+driver/firmware does not expose CSI, only RSSI will be available.
+
+Operational constraints:
+- Requires Linux with `iw` and `nl80211` support.
+- Interfaces may need monitor mode or elevated permissions (`cap_net_admin`) depending on the
+  adapter/driver.
+- CSI collection often requires patched firmware/drivers and is vendor-specific; verify support
+  before deployment.
+
 ## Data retention defaults
 - Retention is **disabled by default** and must be explicitly enabled.
 - When enabled, configure separate TTLs for measurements and audit logs.
