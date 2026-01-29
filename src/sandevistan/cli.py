@@ -640,9 +640,12 @@ def _parse_mmwave_sources(payload: Sequence[object]) -> Optional[_MultiMmWaveSou
     return _MultiMmWaveSource(adapters)
 
 
-def _parse_ble_sources(payload: Sequence[object]) -> Optional[_MultiBleSource]:
+def _parse_ble_sources(payload: Mapping[str, object]) -> Optional[_MultiBleSource]:
+    source_payload = _require_sequence(
+        payload.get("ble_sources", []), "ingestion.ble_sources"
+    )
     adapters = []
-    for idx, entry in enumerate(payload):
+    for idx, entry in enumerate(source_payload):
         entry_map = _require_mapping(entry, f"ingestion.ble_sources[{idx}]")
         source_type = str(entry_map.get("type", "static"))
         scan_interval_seconds = _require_float(
@@ -748,9 +751,7 @@ def _build_pipeline(config: Mapping[str, object]) -> tuple[FusionPipeline, Inges
             ingestion_payload.get("mmwave_sources", []), "ingestion.mmwave_sources"
         )
     )
-    ble_sources = _parse_ble_sources(
-        _require_sequence(ingestion_payload.get("ble_sources", []), "ingestion.ble_sources")
-    )
+    ble_sources = _parse_ble_sources(ingestion_payload)
 
     retention_scheduler = RetentionScheduler(
         retention_config=retention_config,

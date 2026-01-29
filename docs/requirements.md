@@ -118,6 +118,11 @@ config file. Each BLE source entry includes a `type`, `adapter_name`, and
 `scan_interval_seconds` (poll rate). Use `type: "static"` to emit from prerecorded payloads, or
 `type: "bleak"` to scan using the Bleak adapter and an `adapter_settings` block:
 
+Permissions and runtime notes:
+- Linux BLE scanning typically relies on BlueZ and requires access to the Bluetooth adapter.
+  Run with `cap_net_admin`/`cap_net_raw` or ensure the service account is in the `bluetooth`
+  group, and expose `/var/run/dbus` plus the relevant `/dev` nodes when containerized.
+
 ```json
 {
   "ingestion": {
