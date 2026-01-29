@@ -357,7 +357,7 @@ def _parse_wifi_sources(
     adapters = []
     for idx, entry in enumerate(payload):
         entry_map = _require_mapping(entry, f"ingestion.wifi_sources[{idx}]")
-        source_type = str(entry_map.get("type", "http"))
+        source_type = str(entry_map.get("type", "http")).lower()
         if source_type == "http":
             adapters.append(
                 HTTPWiFiExporterAdapter(
