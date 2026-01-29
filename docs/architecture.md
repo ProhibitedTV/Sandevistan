@@ -28,6 +28,10 @@ Camera detections    -> Vision Ingestion ->
 - **Wi-Fi measurement schema**: `{timestamp, ap_id, rssi, csi?, metadata}`
 - **Vision detection schema**: `{timestamp, camera_id, bbox, confidence, keypoints?}`
 - **Fusion output**: `{timestamp, track_id, position, velocity?, uncertainty}`
+- **Audit log schema**
+  - **Sensor provenance log**: `{track_id, timestamp, sources, captured_at}`
+  - **Track update log**: `{track_id, timestamp, sources, captured_at}`
+  - **Consent record**: `{participant_id?, session_id?, status, timestamp}`
 
 ## MVP assumptions
 - Fixed sensor positions with known calibration.
