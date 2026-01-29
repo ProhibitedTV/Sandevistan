@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from sandevistan.ingestion.ble import parse_ble_measurements
 from sandevistan.ingestion.ble_scanner import BleakScannerAdapter, BleakScannerConfig
 
@@ -45,3 +47,22 @@ def test_ble_scanner_offline_payload_requires_identifier() -> None:
         assert "device_id" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected adapter to reject missing device identifier")
+
+
+def test_ble_scanner_discovery_raw_payload_normalizes() -> None:
+    config = BleakScannerConfig(adapter_name="bleak-adapter")
+    adapter = BleakScannerAdapter(config)
+    device = SimpleNamespace(address="AA:BB:CC:DD:EE:FF", rssi=-60, metadata={})
+    advertisement = SimpleNamespace(
+        rssi=-60,
+        manufacturer_data={0x004C: b"\x02\x15"},
+        service_data={"180f": b"\x64"},
+    )
+
+    raw_payloads = adapter._normalize_discoveries([(device, advertisement)])
+    measurements = parse_ble_measurements(raw_payloads)
+
+    assert len(measurements) == 1
+    assert measurements[0].manufacturer_data == {
+        "raw_hex": "05ff4c00021504160f1864"
+    }

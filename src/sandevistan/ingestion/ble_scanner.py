@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 import hashlib
 import time
+import uuid
 from typing import Iterable, List, Mapping, Optional, Sequence
 
 from .ble import parse_ble_measurements
@@ -102,9 +103,9 @@ class BleakScannerAdapter:
                 "device_id": device_id,
                 "adapter": self._config.adapter_name,
             }
-            manufacturer_data = _resolve_manufacturer_data(device, advertisement)
-            if manufacturer_data is not None:
-                entry["manufacturer_data"] = manufacturer_data
+            raw_payload = _resolve_raw_advertisement_payload(device, advertisement)
+            if raw_payload is not None:
+                entry["manufacturer_data"] = raw_payload
             if self._config.include_hashed_identifier:
                 entry["hashed_identifier"] = _hash_identifier(device_id)
             normalized.append(entry)
@@ -154,15 +155,97 @@ def _resolve_rssi(device: object, advertisement: Optional[object]) -> Optional[f
     return None
 
 
-def _resolve_manufacturer_data(
+def _resolve_raw_advertisement_payload(
     device: object, advertisement: Optional[object]
-) -> Optional[dict]:
-    manufacturer_data = getattr(advertisement, "manufacturer_data", None)
-    if isinstance(manufacturer_data, Mapping):
-        return dict(manufacturer_data)
+) -> Optional[bytes]:
+    manufacturer_data = _extract_mapping(advertisement, device, "manufacturer_data")
+    service_data = _extract_mapping(advertisement, device, "service_data")
+    payload = bytearray()
+    payload.extend(_encode_manufacturer_data(manufacturer_data))
+    payload.extend(_encode_service_data(service_data))
+    return bytes(payload) if payload else None
+
+
+def _extract_mapping(
+    advertisement: Optional[object], device: object, key: str
+) -> Mapping[object, object]:
+    data = getattr(advertisement, key, None)
+    if isinstance(data, Mapping):
+        return data
     metadata = getattr(device, "metadata", None)
-    if isinstance(metadata, Mapping) and isinstance(metadata.get("manufacturer_data"), Mapping):
-        return dict(metadata["manufacturer_data"])
+    if isinstance(metadata, Mapping) and isinstance(metadata.get(key), Mapping):
+        return metadata[key]
+    return {}
+
+
+def _encode_manufacturer_data(manufacturer_data: Mapping[object, object]) -> bytes:
+    payload = bytearray()
+    for company_id, data in manufacturer_data.items():
+        company_int = _coerce_int(company_id)
+        if company_int is None:
+            continue
+        data_bytes = _coerce_bytes(data)
+        if data_bytes is None:
+            continue
+        payload.extend(_pack_ad_structure(0xFF, company_int.to_bytes(2, "little") + data_bytes))
+    return bytes(payload)
+
+
+def _encode_service_data(service_data: Mapping[object, object]) -> bytes:
+    payload = bytearray()
+    for uuid_value, data in service_data.items():
+        data_bytes = _coerce_bytes(data)
+        if data_bytes is None:
+            continue
+        packed = _pack_service_data(uuid_value, data_bytes)
+        if packed is not None:
+            payload.extend(packed)
+    return bytes(payload)
+
+
+def _pack_service_data(uuid_value: object, data_bytes: bytes) -> Optional[bytes]:
+    if isinstance(uuid_value, int):
+        if uuid_value <= 0xFFFF:
+            return _pack_ad_structure(0x16, uuid_value.to_bytes(2, "little") + data_bytes)
+        if uuid_value <= 0xFFFFFFFF:
+            return _pack_ad_structure(0x20, uuid_value.to_bytes(4, "little") + data_bytes)
+        return None
+    if isinstance(uuid_value, str):
+        compact = uuid_value.replace("-", "")
+        try:
+            if len(compact) == 4:
+                return _pack_ad_structure(0x16, int(compact, 16).to_bytes(2, "little") + data_bytes)
+            if len(compact) == 8:
+                return _pack_ad_structure(0x20, int(compact, 16).to_bytes(4, "little") + data_bytes)
+            parsed = uuid.UUID(uuid_value)
+        except (ValueError, AttributeError):
+            return None
+        return _pack_ad_structure(0x21, parsed.bytes_le + data_bytes)
+    return None
+
+
+def _pack_ad_structure(data_type: int, data: bytes) -> bytes:
+    length = len(data) + 1
+    return bytes([length, data_type]) + data
+
+
+def _coerce_int(value: object) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_bytes(value: object) -> Optional[bytes]:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray)):
+        try:
+            return bytes(int(item) for item in value)
+        except (TypeError, ValueError):
+            return None
     return None
 
 
