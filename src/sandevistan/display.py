@@ -105,6 +105,7 @@ def _parse_track_state(payload: dict) -> TrackState:
         velocity=tuple(payload["velocity"]) if payload.get("velocity") is not None else None,
         uncertainty=tuple(payload["uncertainty"]),
         confidence=float(payload.get("confidence", 1.0)),
+        alert_tier=str(payload.get("alert_tier", "none")),
     )
 
 

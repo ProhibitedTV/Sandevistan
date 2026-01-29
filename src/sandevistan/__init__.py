@@ -12,6 +12,7 @@ from .config import (
 )
 from .display import LiveTrackerDisplay, render_from_stream
 from .models import (
+    AlertTier,
     BLEMeasurement,
     Detection,
     FusionInput,
@@ -41,6 +42,7 @@ __all__ = [
     "FusionInput",
     "MmWaveMeasurement",
     "BLEMeasurement",
+    "AlertTier",
     "TrackState",
     "WiFiMeasurement",
     "validate_ble_measurement",

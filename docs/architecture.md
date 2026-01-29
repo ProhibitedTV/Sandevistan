@@ -33,11 +33,19 @@ mmWave events        -> mmWave Ingestion ->
 - **Wi-Fi measurement schema**: `{timestamp, ap_id, rssi, csi?, metadata}`
 - **Vision detection schema**: `{timestamp, camera_id, bbox, confidence, keypoints?}`
 - **mmWave event schema**: `{timestamp, sensor_id, confidence, event_type, range_meters?, angle_radians?}`
-- **Fusion output**: `{timestamp, track_id, position, velocity?, uncertainty}`
+- **Fusion output**: `{timestamp, track_id, position, velocity?, uncertainty, alert_tier}`
 - **Audit log schema**
   - **Sensor provenance log**: `{track_id, timestamp, sources, captured_at}`
   - **Track update log**: `{track_id, timestamp, sources, captured_at}`
   - **Consent record**: `{participant_id?, session_id?, status, timestamp}`
+
+## Alert tiers
+The fusion pipeline assigns an `alert_tier` to each track update using recent signal context:
+- **red**: mmWave presence plus a corroborating vision detection.
+- **orange**: Wi-Fi anomaly flagged (optionally alongside mmWave presence).
+- **yellow**: mmWave presence without vision confirmation.
+- **blue**: BLE emitter detected without higher-priority triggers.
+- **none**: No alert triggers detected.
 
 ## MVP assumptions
 - Fixed sensor positions with known calibration.
