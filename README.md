@@ -73,6 +73,13 @@ track updates as NDJSON (one JSON object per track update).
            "endpoint_url": "http://10.0.0.6:8081/vision/detections",
            "default_camera_id": "cam-01"
          }
+       ],
+       "ble_sources": [
+         {
+           "type": "static",
+           "adapter_name": "ble-scanner-01",
+           "scan_interval_seconds": 1.0
+         }
        ]
      },
      "synchronization": {

@@ -29,7 +29,8 @@ from .ingestion import (
     ProcessVisionExporterAdapter,
     ProcessVisionExporterConfig,
 )
-from .models import Detection, MmWaveMeasurement, TrackState, WiFiMeasurement
+from .models import BLEMeasurement, Detection, MmWaveMeasurement, TrackState, WiFiMeasurement
+from .ingestion.ble import BLEAdvertisementScanner
 from .pipeline import FusionPipeline
 from .retention import RetentionScheduler
 from .sync import SynchronizationBuffer
@@ -78,6 +79,49 @@ class _MultiMmWaveSource:
                 LOGGER.exception("mmWave source failed: %s", exc)
         return measurements
 
+
+class _MultiBleSource:
+    def __init__(self, sources: Sequence[object]) -> None:
+        self._sources = sources
+
+    def fetch(self) -> Sequence[BLEMeasurement]:
+        measurements: list[BLEMeasurement] = []
+        for source in self._sources:
+            try:
+                measurements.extend(source.fetch())
+            except Exception as exc:  # pragma: no cover - adapter failures
+                LOGGER.exception("BLE source failed: %s", exc)
+        return measurements
+
+
+class _BleStaticSource:
+    def __init__(
+        self,
+        raw_measurements: Sequence[Mapping[str, object]],
+        scan_interval_seconds: float,
+        adapter_name: str,
+    ) -> None:
+        self._scanner = BLEAdvertisementScanner(self._drain)
+        self._pending_measurements = list(raw_measurements)
+        self._scan_interval_seconds = max(scan_interval_seconds, 0.0)
+        self._adapter_name = adapter_name
+        self._next_scan_time = 0.0
+
+    def _drain(self) -> Sequence[Mapping[str, object]]:
+        payload = self._pending_measurements
+        self._pending_measurements = []
+        return payload
+
+    def fetch(self) -> Sequence[BLEMeasurement]:
+        now = time.time()
+        if now < self._next_scan_time:
+            return []
+        self._next_scan_time = now + self._scan_interval_seconds
+        try:
+            return self._scanner.fetch()
+        except Exception as exc:  # pragma: no cover - adapter failures
+            LOGGER.exception("BLE source '%s' failed: %s", self._adapter_name, exc)
+            return []
 
 def _load_config(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
@@ -439,6 +483,38 @@ def _parse_mmwave_sources(payload: Sequence[object]) -> Optional[_MultiMmWaveSou
     return _MultiMmWaveSource(adapters)
 
 
+def _parse_ble_sources(payload: Sequence[object]) -> Optional[_MultiBleSource]:
+    adapters = []
+    for idx, entry in enumerate(payload):
+        entry_map = _require_mapping(entry, f"ingestion.ble_sources[{idx}]")
+        source_type = str(entry_map.get("type", "static"))
+        if source_type != "static":
+            raise ValueError(f"Unsupported BLE source type: {source_type}")
+        scan_interval_seconds = _require_float(
+            entry_map.get("scan_interval_seconds", 1.0),
+            "ble_source.scan_interval_seconds",
+        )
+        adapter_name = str(entry_map.get("adapter_name", f"ble_scanner_{idx}"))
+        raw_measurements = _require_sequence(
+            entry_map.get("measurements", []),
+            "ble_source.measurements",
+        )
+        normalized_measurements = [
+            _require_mapping(item, f"ble_source.measurements[{item_idx}]")
+            for item_idx, item in enumerate(raw_measurements)
+        ]
+        adapters.append(
+            _BleStaticSource(
+                normalized_measurements,
+                scan_interval_seconds=scan_interval_seconds,
+                adapter_name=adapter_name,
+            )
+        )
+    if not adapters:
+        return None
+    return _MultiBleSource(adapters)
+
+
 def _emit_ndjson(updates: Iterable[TrackState]) -> None:
     for update in updates:
         payload = asdict(update)
@@ -479,6 +555,9 @@ def _build_pipeline(config: Mapping[str, object]) -> tuple[FusionPipeline, Inges
             ingestion_payload.get("mmwave_sources", []), "ingestion.mmwave_sources"
         )
     )
+    ble_sources = _parse_ble_sources(
+        _require_sequence(ingestion_payload.get("ble_sources", []), "ingestion.ble_sources")
+    )
 
     retention_scheduler = RetentionScheduler(
         retention_config=retention_config,
@@ -495,6 +574,7 @@ def _build_pipeline(config: Mapping[str, object]) -> tuple[FusionPipeline, Inges
         wifi_source=wifi_sources,
         vision_source=vision_sources,
         mmwave_source=mmwave_sources,
+        ble_source=ble_sources,
         sync_buffer=sync_buffer,
     )
     return pipeline, orchestrator
