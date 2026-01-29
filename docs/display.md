@@ -4,6 +4,50 @@ The tracker display is a lightweight CLI renderer that consumes tracker output u
 (`{timestamp, track_id, position, velocity?, uncertainty}`) as newline-delimited JSON and
 renders a live list + floor-plan placeholder.
 
+## HUD display (pygame)
+
+The HUD is a full-screen `pygame` overlay that renders a live camera view, alert tier
+counts, device list, and mmWave status. It consumes NDJSON on stdin and expects optional
+camera frames to be supplied as base64-encoded image payloads (PNG/JPEG). Ensure `pygame`
+is installed in your environment before launching.
+
+Launch the HUD with the module entry point (fullscreen by default):
+
+```bash
+python -m sandevistan.hud < stream.ndjson
+```
+
+Use the packaged CLI entry point if installed:
+
+```bash
+sandevistan-hud < stream.ndjson
+```
+
+To run in a window instead of full screen:
+
+```bash
+sandevistan-hud --windowed --width 1280 --height 720 < stream.ndjson
+```
+
+### HUD input fields
+
+Each NDJSON line can include:
+
+- `tracks`: List of tracker updates (same fields as the live tracker display).
+- `alert_tier`: On each track (`red`, `orange`, `yellow`, `blue`, or `none`) used to count
+  alert badges.
+- `camera_frame`: Base64-encoded image payload (PNG/JPEG) for the main view.
+- `devices` or `emitters`: Device list entries (`device_id`/`emitter_id`, `rssi`, `last_seen`).
+- `mmwave_status`: Object with `status`, `last_seen`, and optional `detail`. You can also
+  supply `sensor_health` with a label containing `mmwave`.
+
+### HUD UI legend
+
+- **Alert tiers**: Colored badges for red/yellow/blue alert counts derived from tracks.
+- **Camera panel**: Most recent camera frame with age indicator in the lower-left corner.
+- **mmWave status**: Online/offline state plus last-seen age.
+- **Device list**: RSSI + age for the most recently seen devices (top 10 by RSSI).
+
 ## UI overview
 
 Each refresh includes the following sections:
