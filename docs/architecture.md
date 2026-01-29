@@ -4,6 +4,7 @@
 1. **Wi-Fi Ingestion**
    - Collects RSSI/CSI data from known access points.
    - Normalizes and timestamps measurements.
+   - Supports HTTP JSON exporters that emit the Wi-Fi measurement schema.
 2. **Vision Ingestion**
    - Accepts camera detections (boxes, keypoints) with timestamps.
    - Optionally performs camera-to-world transforms.
