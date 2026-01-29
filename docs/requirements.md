@@ -76,6 +76,17 @@ adapter. The recommended capabilities for a non-root process are:
 - `cap_net_raw`: required to open raw Bluetooth sockets.
 - `cap_net_admin`: required by some adapters to configure scan parameters.
 
+To grant these to a Python virtualenv without running as root, set file capabilities on
+the interpreter or the entrypoint binary (adjust the path to your venv):
+
+```bash
+sudo setcap 'cap_net_raw,cap_net_admin+eip' /path/to/venv/bin/python
+```
+
+Alternatively, add the service user to the `bluetooth` group if your distro gates access
+via group permissions, but capabilities are still recommended for consistent access across
+BlueZ versions.
+
 ## Local Wi-Fi capture requirements
 Local Wi-Fi capture relies on Linux `nl80211` tooling and compatible NIC/driver support. The
 default implementation uses `iw dev <iface> scan` to read RSSI values; ensure the interface is
