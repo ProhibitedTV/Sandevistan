@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -56,3 +56,12 @@ class RetentionConfig:
 
     def is_enabled(self) -> bool:
         return self.enabled and bool(self.measurement_ttl_seconds or self.log_ttl_seconds)
+
+
+@dataclass(frozen=True)
+class IngestionConfig:
+    """Typed representation of ingestion sources in the JSON config."""
+
+    wifi_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
+    vision_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
+    mmwave_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
