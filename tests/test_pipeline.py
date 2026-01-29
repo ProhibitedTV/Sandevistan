@@ -1,6 +1,13 @@
 import math
 
-from sandevistan.config import SensorConfig, SpaceConfig
+from sandevistan.config import (
+    AccessPointCalibration,
+    CameraCalibration,
+    CameraExtrinsics,
+    CameraIntrinsics,
+    SensorConfig,
+    SpaceConfig,
+)
 from sandevistan.models import Detection, FusionInput, WiFiMeasurement
 from sandevistan.pipeline import FusionPipeline
 
@@ -8,11 +15,19 @@ from sandevistan.pipeline import FusionPipeline
 def _make_pipeline() -> FusionPipeline:
     sensor_config = SensorConfig(
         wifi_access_points={
-            "ap-1": (0.0, 0.0),
-            "ap-2": (5.0, 0.0),
-            "ap-3": (0.0, 5.0),
+            "ap-1": AccessPointCalibration(position=(0.0, 0.0), position_uncertainty_meters=0.5),
+            "ap-2": AccessPointCalibration(position=(5.0, 0.0), position_uncertainty_meters=0.5),
+            "ap-3": AccessPointCalibration(position=(0.0, 5.0), position_uncertainty_meters=0.5),
         },
-        cameras={"cam-1": (0.0, 0.0)},
+        cameras={
+            "cam-1": CameraCalibration(
+                intrinsics=CameraIntrinsics(
+                    focal_length=(1.0, 1.0),
+                    principal_point=(0.0, 0.0),
+                ),
+                extrinsics=CameraExtrinsics(translation=(0.0, 0.0), rotation_radians=0.0),
+            )
+        },
     )
     space_config = SpaceConfig(width_meters=10.0, height_meters=10.0)
     return FusionPipeline(sensor_config=sensor_config, space_config=space_config)

@@ -153,12 +153,12 @@ class FusionPipeline:
         total_weight = 0.0
         confidences = []
         for measurement in wifi:
-            position = self.sensor_config.wifi_access_points.get(measurement.access_point_id)
-            if not position:
+            calibration = self.sensor_config.wifi_access_points.get(measurement.access_point_id)
+            if not calibration:
                 continue
             weight = max(1.0, 100.0 + measurement.rssi)
-            weighted_x += position[0] * weight
-            weighted_y += position[1] * weight
+            weighted_x += calibration.position[0] * weight
+            weighted_y += calibration.position[1] * weight
             total_weight += weight
             confidences.append(self._rssi_to_confidence(measurement.rssi))
         if total_weight == 0.0:

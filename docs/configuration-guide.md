@@ -21,10 +21,10 @@ Use `SpaceConfig` to describe the tracked area:
 Document the coordinate system visually (annotated floor plan) so all teams use the same reference.
 
 ## Sensor configuration
-Use `SensorConfig` to map sensors to fixed coordinates:
+Use `SensorConfig` to map sensors to calibration data:
 
-- `wifi_access_points`: `{access_point_id: (x, y)}` mapping in meters.
-- `cameras`: `{camera_id: (x, y)}` mapping in meters.
+- `wifi_access_points`: `{access_point_id: AccessPointCalibration}` mapping in meters.
+- `cameras`: `{camera_id: CameraCalibration}` mapping describing intrinsics/extrinsics.
 
 ### Sensor calibration steps
 1. **Survey the space**: mark permanent fiducials (tape crosses or wall markers) that can be measured
@@ -50,13 +50,17 @@ with the endpoint URL and the matching access point ID.
 
 ### HTTP exporter example
 ```python
-from sandevistan.config import SensorConfig
+from sandevistan.config import AccessPointCalibration, SensorConfig
 from sandevistan.ingestion import HTTPWiFiExporterAdapter, HTTPWiFiExporterConfig
 
 sensor_config = SensorConfig(
     wifi_access_points={
-        "ap-lobby-01": (2.5, 1.0),
-        "ap-lab-02": (8.0, 3.5),
+        "ap-lobby-01": AccessPointCalibration(
+            position=(2.5, 1.0), position_uncertainty_meters=0.4
+        ),
+        "ap-lab-02": AccessPointCalibration(
+            position=(8.0, 3.5), position_uncertainty_meters=0.6
+        ),
     },
     cameras={},
 )

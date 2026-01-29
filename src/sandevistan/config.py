@@ -5,9 +5,34 @@ from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
+class CameraIntrinsics:
+    focal_length: Tuple[float, float]
+    principal_point: Tuple[float, float]
+    skew: float = 0.0
+
+
+@dataclass(frozen=True)
+class CameraExtrinsics:
+    translation: Tuple[float, float]
+    rotation_radians: float = 0.0
+
+
+@dataclass(frozen=True)
+class CameraCalibration:
+    intrinsics: CameraIntrinsics
+    extrinsics: CameraExtrinsics
+
+
+@dataclass(frozen=True)
+class AccessPointCalibration:
+    position: Tuple[float, float]
+    position_uncertainty_meters: float
+
+
+@dataclass(frozen=True)
 class SensorConfig:
-    wifi_access_points: Dict[str, Tuple[float, float]]
-    cameras: Dict[str, Tuple[float, float]]
+    wifi_access_points: Dict[str, AccessPointCalibration]
+    cameras: Dict[str, CameraCalibration]
 
 
 @dataclass(frozen=True)

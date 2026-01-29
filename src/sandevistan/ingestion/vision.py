@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from ..calibration import (
+    require_camera_calibration,
+    transform_bbox_to_world,
+    transform_points_to_world,
+)
 from ..config import SensorConfig
 from ..models import Detection
 
@@ -32,8 +37,8 @@ def parse_detections(
         confidence = _require_float(raw, "confidence", idx, camera_id, timestamp)
         bbox = _require_bbox(raw, "bbox", idx, camera_id, timestamp)
 
-        camera_origin = sensor_config.cameras.get(camera_id)
-        if camera_origin is None:
+        camera_calibration = sensor_config.cameras.get(camera_id)
+        if camera_calibration is None:
             raise DetectionIngestionError(
                 _format_message(
                     "Unknown camera; update SensorConfig before ingestion.",
@@ -41,6 +46,12 @@ def parse_detections(
                     timestamp,
                 )
             )
+        try:
+            camera_calibration = require_camera_calibration(camera_calibration, camera_id)
+        except ValueError as exc:
+            raise DetectionIngestionError(
+                _format_message(str(exc), camera_id, timestamp)
+            ) from exc
 
         last_timestamp = last_timestamp_by_camera.get(camera_id)
         if last_timestamp is not None and timestamp < last_timestamp:
@@ -56,13 +67,10 @@ def parse_detections(
             )
         last_timestamp_by_camera[camera_id] = timestamp
 
-        normalized_bbox = _normalize_bbox(bbox, camera_origin)
+        normalized_bbox = transform_bbox_to_world(bbox, camera_calibration)
         keypoints = _optional_keypoints(raw.get("keypoints"), camera_id, timestamp)
         if keypoints is not None:
-            keypoints = [
-                (point[0] + camera_origin[0], point[1] + camera_origin[1])
-                for point in keypoints
-            ]
+            keypoints = transform_points_to_world(keypoints, camera_calibration)
 
         detections.append(
             Detection(
@@ -197,18 +205,6 @@ def _optional_keypoints(
                 )
             )
     return keypoints
-
-
-def _normalize_bbox(
-    bbox: Tuple[float, float, float, float],
-    camera_origin: Tuple[float, float],
-) -> Tuple[float, float, float, float]:
-    return (
-        bbox[0] + camera_origin[0],
-        bbox[1] + camera_origin[1],
-        bbox[2] + camera_origin[0],
-        bbox[3] + camera_origin[1],
-    )
 
 
 def _format_message(message: str, camera_id: object, timestamp: object) -> str:
