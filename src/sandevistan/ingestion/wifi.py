@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, List, Mapping, Optional, Sequence
 
+from ..calibration import require_access_point_calibration
 from ..config import SensorConfig
 from ..models import WiFiMeasurement
 
@@ -31,7 +32,8 @@ def parse_wifi_measurements(
         timestamp = _require_float(raw, "timestamp", idx, access_point_id)
         rssi = _require_float(raw, "rssi", idx, access_point_id, timestamp)
 
-        if access_point_id not in sensor_config.wifi_access_points:
+        access_point_calibration = sensor_config.wifi_access_points.get(access_point_id)
+        if access_point_calibration is None:
             raise WiFiIngestionError(
                 _format_message(
                     "Unknown access point; update SensorConfig before ingestion.",
@@ -39,6 +41,12 @@ def parse_wifi_measurements(
                     timestamp,
                 )
             )
+        try:
+            require_access_point_calibration(access_point_calibration, access_point_id)
+        except ValueError as exc:
+            raise WiFiIngestionError(
+                _format_message(str(exc), access_point_id, timestamp)
+            ) from exc
 
         last_timestamp = last_timestamp_by_ap.get(access_point_id)
         if last_timestamp is not None and timestamp < last_timestamp:

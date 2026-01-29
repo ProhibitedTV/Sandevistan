@@ -17,9 +17,21 @@ python - <<'PY'
 import json
 import time
 
-from sandevistan import Detection, FusionInput, FusionPipeline, SensorConfig, SpaceConfig
+from sandevistan import (
+    AccessPointCalibration,
+    Detection,
+    FusionInput,
+    FusionPipeline,
+    SensorConfig,
+    SpaceConfig,
+)
 
-sensor_config = SensorConfig(wifi_access_points={"ap-1": (0.0, 0.0)}, cameras={})
+sensor_config = SensorConfig(
+    wifi_access_points={
+        "ap-1": AccessPointCalibration(position=(0.0, 0.0), position_uncertainty_meters=0.5)
+    },
+    cameras={},
+)
 space_config = SpaceConfig(width_meters=10.0, height_meters=6.0)
 pipeline = FusionPipeline(sensor_config=sensor_config, space_config=space_config)
 

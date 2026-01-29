@@ -1,7 +1,15 @@
 """Research prototype scaffolding for Sandevistan-inspired sensor fusion."""
 
 from .audit import AuditLogger, ConsentError, ConsentStatus, InMemoryConsentStore
-from .config import RetentionConfig, SensorConfig, SpaceConfig
+from .config import (
+    AccessPointCalibration,
+    CameraCalibration,
+    CameraExtrinsics,
+    CameraIntrinsics,
+    RetentionConfig,
+    SensorConfig,
+    SpaceConfig,
+)
 from .display import LiveTrackerDisplay, render_from_stream
 from .models import Detection, FusionInput, TrackState, WiFiMeasurement
 from .pipeline import FusionPipeline
@@ -11,6 +19,10 @@ from .sync import SyncBatch, SyncStatus, SynchronizationBuffer
 __all__ = [
     "SensorConfig",
     "SpaceConfig",
+    "CameraIntrinsics",
+    "CameraExtrinsics",
+    "CameraCalibration",
+    "AccessPointCalibration",
     "RetentionConfig",
     "AuditLogger",
     "ConsentError",
