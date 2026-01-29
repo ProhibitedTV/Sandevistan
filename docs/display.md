@@ -7,7 +7,7 @@ renders a live list + floor-plan placeholder.
 ## HUD display (pygame)
 
 The HUD is a full-screen `pygame` overlay that renders a live camera view, alert tier
-counts, device list, and mmWave status. It consumes NDJSON on stdin and expects optional
+counts, sensor status, and device list. It consumes NDJSON on stdin and expects optional
 camera frames to be supplied as base64-encoded image payloads (PNG/JPEG). Ensure `pygame`
 is installed in your environment before launching.
 
@@ -38,14 +38,15 @@ Each NDJSON line can include:
   alert badges.
 - `camera_frame`: Base64-encoded image payload (PNG/JPEG) for the main view.
 - `devices` or `emitters`: Device list entries (`device_id`/`emitter_id`, `rssi`, `last_seen`).
-- `mmwave_status`: Object with `status`, `last_seen`, and optional `detail`. You can also
-  supply `sensor_health` with a label containing `mmwave`.
+- `sensor_health` or `sensors`: List or object describing sensor status entries.
+- `mmwave_status`: Optional object with `status`, `last_seen`, and optional `detail`. This
+  is included in the sensor list if provided.
 
 ### HUD UI legend
 
 - **Alert tiers**: Colored badges for red/yellow/blue alert counts derived from tracks.
 - **Camera panel**: Most recent camera frame with age indicator in the lower-left corner.
-- **mmWave status**: Online/offline state plus last-seen age.
+- **Sensor status**: Online/offline state plus last-seen age for each sensor.
 - **Device list**: RSSI + age for the most recently seen devices (top 10 by RSSI).
 
 ## UI overview

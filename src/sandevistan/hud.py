@@ -34,6 +34,7 @@ class SensorHealthSnapshot:
 class HudUpdate:
     tracks: List[TrackState] = field(default_factory=list)
     devices: List[DeviceSnapshot] = field(default_factory=list)
+    sensor_health: List[SensorHealthSnapshot] = field(default_factory=list)
     mmwave_status: Optional[SensorHealthSnapshot] = None
     camera_bytes: Optional[bytes] = None
 
@@ -43,6 +44,7 @@ class HudState:
     max_age_seconds: float = 4.0
     tracks: dict[str, TrackState] = field(default_factory=dict)
     devices: dict[str, DeviceSnapshot] = field(default_factory=dict)
+    sensor_health: dict[str, SensorHealthSnapshot] = field(default_factory=dict)
     mmwave_status: Optional[SensorHealthSnapshot] = None
     camera_surface: Optional[object] = None
     camera_updated_at: Optional[float] = None
@@ -52,6 +54,8 @@ class HudState:
             self.tracks[track.track_id] = track
         for device in update.devices:
             self.devices[device.device_id] = device
+        for sensor in update.sensor_health:
+            self.sensor_health[sensor.label] = sensor
         if update.mmwave_status is not None:
             self.mmwave_status = update.mmwave_status
         if update.camera_bytes is not None:
@@ -253,12 +257,18 @@ def _parse_hud_update(payload: object) -> HudUpdate:
         tracks.append(_parse_track_state(payload))
 
     devices = _parse_devices(payload.get("emitters") or payload.get("devices"))
+    sensor_health = _parse_sensor_health(payload.get("sensor_health") or payload.get("sensors"))
     mmwave_status = _parse_mmwave_status(payload)
+    if mmwave_status is not None and mmwave_status.label not in {
+        sensor.label for sensor in sensor_health
+    }:
+        sensor_health.append(mmwave_status)
     camera_bytes = _extract_camera_bytes(payload)
 
     return HudUpdate(
         tracks=tracks,
         devices=devices,
+        sensor_health=sensor_health,
         mmwave_status=mmwave_status,
         camera_bytes=camera_bytes,
     )
@@ -445,44 +455,55 @@ def _render_hud(
     _draw_text(
         pygame_module,
         screen,
-        "mmWave status",
+        "Sensor status",
         font,
         text_color,
         (info_x, info_y),
     )
     info_y += 36
-    if state.mmwave_status is None:
+    sensor_entries = list(state.sensor_health.values())
+    if not sensor_entries and state.mmwave_status is not None:
+        sensor_entries.append(state.mmwave_status)
+    if not sensor_entries:
         _draw_text(
             pygame_module,
             screen,
-            "No mmWave data",
+            "No sensor data",
             small_font,
             muted_text,
             (info_x, info_y),
         )
         info_y += 28
     else:
-        status = state.mmwave_status.status
-        status_color = (106, 210, 134) if status.lower() == "online" else (220, 76, 86)
-        _draw_text(
-            pygame_module,
-            screen,
-            f"{state.mmwave_status.label}: {status}",
-            small_font,
-            status_color,
-            (info_x, info_y),
-        )
-        info_y += 22
-        last_seen = _format_age(now, state.mmwave_status.last_seen)
-        _draw_text(
-            pygame_module,
-            screen,
-            f"Last seen: {last_seen}",
-            small_font,
-            muted_text,
-            (info_x, info_y),
-        )
-        info_y += 34
+        sensor_entries = sorted(sensor_entries, key=lambda item: item.label)
+        for sensor in sensor_entries:
+            status = sensor.status
+            status_color = (
+                (106, 210, 134) if status.lower() == "online" else (220, 76, 86)
+            )
+            last_seen = _format_age(now, sensor.last_seen)
+            detail = f" ({sensor.detail})" if sensor.detail else ""
+            _draw_text(
+                pygame_module,
+                screen,
+                f"{sensor.label}: {status}{detail}",
+                small_font,
+                status_color,
+                (info_x, info_y),
+            )
+            info_y += 20
+            _draw_text(
+                pygame_module,
+                screen,
+                f"Last seen: {last_seen}",
+                small_font,
+                muted_text,
+                (info_x, info_y),
+            )
+            info_y += 24
+            if info_y > info_rect.bottom - 120:
+                break
+        info_y += 6
 
     pygame_module.draw.line(
         screen,
