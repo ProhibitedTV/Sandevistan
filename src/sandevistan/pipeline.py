@@ -12,10 +12,15 @@ from .models import FusionInput, TrackState
 class _TrackMemory:
     track_id: str
     timestamp: float
+    state: Tuple[float, float, float, float]
+    covariance: List[List[float]]
     position: Tuple[float, float]
     velocity: Optional[Tuple[float, float]]
     uncertainty: Tuple[float, float]
     confidence: float
+    status: str
+    hits: int
+    misses: int
 
 
 @dataclass
@@ -32,6 +37,9 @@ class FusionPipeline:
     space_config: SpaceConfig
     _tracks: Dict[str, _TrackMemory] = field(default_factory=dict, init=False, repr=False)
     _next_track_id: int = field(default=1, init=False, repr=False)
+    _confirm_hits: int = field(default=2, init=False, repr=False)
+    _lost_misses: int = field(default=2, init=False, repr=False)
+    _terminate_misses: int = field(default=4, init=False, repr=False)
 
     def fuse(self, measurements: FusionInput) -> List[TrackState]:
         """
@@ -47,23 +55,24 @@ class FusionPipeline:
             measurements.wifi, measurements.vision
         )
         candidates = self._build_candidates(synced_wifi, synced_vision, reference_time)
-        if not candidates:
-            return []
+        assignments, unassigned_tracks, unassigned_candidates = self._associate_tracks(
+            candidates, reference_time
+        )
 
-        assignments = self._associate_tracks(candidates)
         updated_tracks: List[TrackState] = []
         for track_id, candidate in assignments:
             updated = self._update_track(track_id, candidate)
-            updated_tracks.append(
-                TrackState(
-                    track_id=updated.track_id,
-                    timestamp=updated.timestamp,
-                    position=updated.position,
-                    velocity=updated.velocity,
-                    uncertainty=updated.uncertainty,
-                    confidence=updated.confidence,
-                )
-            )
+            if updated.status != "terminated":
+                updated_tracks.append(self._to_track_state(updated))
+
+        for track_id in unassigned_tracks:
+            updated = self._mark_missed(track_id, reference_time)
+            if updated and updated.status != "terminated":
+                updated_tracks.append(self._to_track_state(updated))
+
+        for candidate in unassigned_candidates:
+            updated = self._initialize_track(candidate)
+            updated_tracks.append(self._to_track_state(updated))
 
         return updated_tracks
 
@@ -208,102 +217,268 @@ class FusionPipeline:
         )
 
     def _associate_tracks(
-        self, candidates: List[_MeasurementCandidate], max_distance: float = 3.0
-    ) -> List[Tuple[str, _MeasurementCandidate]]:
+        self,
+        candidates: List[_MeasurementCandidate],
+        reference_time: float,
+        max_distance: float = 3.0,
+    ) -> Tuple[
+        List[Tuple[str, _MeasurementCandidate]],
+        List[str],
+        List[_MeasurementCandidate],
+    ]:
         if not self._tracks:
-            return [(self._new_track_id(), candidate) for candidate in candidates]
+            return [], [], candidates
 
-        assignments: List[Tuple[str, _MeasurementCandidate]] = []
-        available_tracks = dict(self._tracks)
-        for candidate in candidates:
-            best_track_id = None
-            best_distance = float("inf")
-            for track_id, track in available_tracks.items():
-                predicted_pos = self._predict_position(track, candidate.timestamp)
-                distance = self._distance(predicted_pos, candidate.position)
-                if distance < best_distance:
-                    best_distance = distance
-                    best_track_id = track_id
-            if best_track_id is not None and best_distance <= max_distance:
-                assignments.append((best_track_id, candidate))
-                available_tracks.pop(best_track_id, None)
-            else:
-                assignments.append((self._new_track_id(), candidate))
-        return assignments
+        track_ids = list(self._tracks.keys())
+        if not candidates:
+            return [], track_ids, []
+
+        cost_matrix: List[List[float]] = []
+        distance_matrix: List[List[float]] = []
+        gating_cost = max_distance * 10.0
+
+        for track_id in track_ids:
+            track = self._tracks[track_id]
+            predicted_position, _, _ = self._predict_state(track, reference_time)
+            row_costs: List[float] = []
+            row_distances: List[float] = []
+            for candidate in candidates:
+                distance = self._distance(predicted_position, candidate.position)
+                row_distances.append(distance)
+                row_costs.append(distance if distance <= max_distance else gating_cost)
+            cost_matrix.append(row_costs)
+            distance_matrix.append(row_distances)
+
+        assignments = self._hungarian_assign(cost_matrix)
+        matched: List[Tuple[str, _MeasurementCandidate]] = []
+        assigned_tracks = set()
+        assigned_candidates = set()
+        for row, col in assignments:
+            if row >= len(track_ids) or col >= len(candidates):
+                continue
+            distance = distance_matrix[row][col]
+            if distance > max_distance:
+                continue
+            track_id = track_ids[row]
+            matched.append((track_id, candidates[col]))
+            assigned_tracks.add(track_id)
+            assigned_candidates.add(col)
+
+        unassigned_tracks = [tid for tid in track_ids if tid not in assigned_tracks]
+        unassigned_candidates = [
+            candidate for idx, candidate in enumerate(candidates) if idx not in assigned_candidates
+        ]
+        return matched, unassigned_tracks, unassigned_candidates
 
     def _update_track(self, track_id: str, candidate: _MeasurementCandidate) -> _TrackMemory:
         existing = self._tracks.get(track_id)
         if existing is None:
-            updated = _TrackMemory(
-                track_id=track_id,
-                timestamp=candidate.timestamp,
-                position=candidate.position,
-                velocity=None,
-                uncertainty=candidate.uncertainty,
-                confidence=candidate.confidence,
-            )
-            self._tracks[track_id] = updated
-            return updated
+            return self._initialize_track(candidate, track_id=track_id)
 
-        dt = max(candidate.timestamp - existing.timestamp, 1e-3)
-        predicted_pos = self._predict_position(existing, candidate.timestamp)
-        predicted_uncertainty = (
-            existing.uncertainty[0] + 0.25 * dt,
-            existing.uncertainty[1] + 0.25 * dt,
+        _, predicted_state, predicted_covariance = self._predict_state(
+            existing, candidate.timestamp
         )
-        updated_pos = self._kalman_update(
-            predicted_pos,
-            predicted_uncertainty,
+        updated_state, updated_covariance = self._kalman_update(
+            predicted_state,
+            predicted_covariance,
             candidate.position,
             candidate.uncertainty,
         )
-        velocity = (
-            (updated_pos[0] - existing.position[0]) / dt,
-            (updated_pos[1] - existing.position[1]) / dt,
-        )
-        updated_uncertainty = (
-            min(predicted_uncertainty[0], candidate.uncertainty[0]),
-            min(predicted_uncertainty[1], candidate.uncertainty[1]),
-        )
+        hits = existing.hits + 1
+        misses = 0
+        status = existing.status
+        if status in {"init", "lost"} and hits >= self._confirm_hits:
+            status = "confirmed"
+        elif status == "init":
+            status = "init"
+
         updated_confidence = min(
-            1.0, 0.6 * existing.confidence + 0.4 * candidate.confidence
+            1.0, 0.7 * existing.confidence + 0.3 * candidate.confidence
         )
-        updated = _TrackMemory(
+        updated = self._make_track_memory(
             track_id=track_id,
             timestamp=candidate.timestamp,
-            position=updated_pos,
-            velocity=velocity,
-            uncertainty=updated_uncertainty,
+            state=updated_state,
+            covariance=updated_covariance,
             confidence=updated_confidence,
+            status=status,
+            hits=hits,
+            misses=misses,
         )
         self._tracks[track_id] = updated
         return updated
 
     def _kalman_update(
         self,
-        predicted: Tuple[float, float],
-        predicted_uncertainty: Tuple[float, float],
+        predicted_state: Tuple[float, float, float, float],
+        predicted_covariance: List[List[float]],
         measurement: Tuple[float, float],
         measurement_uncertainty: Tuple[float, float],
-    ) -> Tuple[float, float]:
-        gain_x = predicted_uncertainty[0] / (
-            predicted_uncertainty[0] + measurement_uncertainty[0]
+    ) -> Tuple[Tuple[float, float, float, float], List[List[float]]]:
+        h_matrix = [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+        ]
+        measurement_noise = [
+            [measurement_uncertainty[0] ** 2, 0.0],
+            [0.0, measurement_uncertainty[1] ** 2],
+        ]
+        projected_covariance = self._mat_mult_2x4_4x4(
+            h_matrix, predicted_covariance
         )
-        gain_y = predicted_uncertainty[1] / (
-            predicted_uncertainty[1] + measurement_uncertainty[1]
+        residual_covariance = self._mat_add_2x2(
+            self._mat_mult_2x4_4x2(projected_covariance, self._transpose_2x4(h_matrix)),
+            measurement_noise,
         )
-        return (
-            predicted[0] + gain_x * (measurement[0] - predicted[0]),
-            predicted[1] + gain_y * (measurement[1] - predicted[1]),
+        residual_covariance_inv = self._invert_2x2(residual_covariance)
+        kalman_gain = self._mat_mult_4x4_4x2(
+            predicted_covariance,
+            self._mat_mult_4x2_2x2(
+                self._transpose_2x4(h_matrix),
+                residual_covariance_inv,
+            ),
         )
 
-    def _predict_position(self, track: _TrackMemory, timestamp: float) -> Tuple[float, float]:
-        if track.velocity is None:
-            return track.position
+        residual = [
+            measurement[0] - predicted_state[0],
+            measurement[1] - predicted_state[1],
+        ]
+        updated_state = list(predicted_state)
+        for i in range(4):
+            updated_state[i] += kalman_gain[i][0] * residual[0] + kalman_gain[i][1] * residual[1]
+
+        identity = self._identity_4x4()
+        kh = self._mat_mult_4x2_2x4(kalman_gain, h_matrix)
+        updated_covariance = self._mat_mult_4x4_4x4(
+            self._mat_sub_4x4(identity, kh),
+            predicted_covariance,
+        )
+        return (updated_state[0], updated_state[1], updated_state[2], updated_state[3]), updated_covariance
+
+    def _predict_state(
+        self, track: _TrackMemory, timestamp: float
+    ) -> Tuple[
+        Tuple[float, float],
+        Tuple[float, float, float, float],
+        List[List[float]],
+    ]:
         dt = max(timestamp - track.timestamp, 0.0)
-        return (
-            track.position[0] + track.velocity[0] * dt,
-            track.position[1] + track.velocity[1] * dt,
+        transition = [
+            [1.0, 0.0, dt, 0.0],
+            [0.0, 1.0, 0.0, dt],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        process_noise = self._process_noise(dt, 0.5)
+        predicted_state = self._mat_vec_mult_4x4(transition, track.state)
+        predicted_covariance = self._mat_add_4x4(
+            self._mat_mult_4x4_4x4(
+                self._mat_mult_4x4_4x4(transition, track.covariance),
+                self._transpose_4x4(transition),
+            ),
+            process_noise,
+        )
+        position = (predicted_state[0], predicted_state[1])
+        return position, (
+            predicted_state[0],
+            predicted_state[1],
+            predicted_state[2],
+            predicted_state[3],
+        ), predicted_covariance
+
+    def _mark_missed(self, track_id: str, timestamp: float) -> Optional[_TrackMemory]:
+        track = self._tracks.get(track_id)
+        if track is None:
+            return None
+        position, predicted_state, predicted_covariance = self._predict_state(track, timestamp)
+        misses = track.misses + 1
+        status = track.status
+        if misses >= self._terminate_misses:
+            status = "terminated"
+        elif misses >= self._lost_misses:
+            status = "lost"
+        updated_confidence = max(0.0, track.confidence * 0.85)
+        updated = self._make_track_memory(
+            track_id=track_id,
+            timestamp=timestamp,
+            state=predicted_state,
+            covariance=predicted_covariance,
+            confidence=updated_confidence,
+            status=status,
+            hits=track.hits,
+            misses=misses,
+        )
+        if status == "terminated":
+            self._tracks.pop(track_id, None)
+        else:
+            self._tracks[track_id] = updated
+        return updated
+
+    def _initialize_track(
+        self, candidate: _MeasurementCandidate, track_id: Optional[str] = None
+    ) -> _TrackMemory:
+        if track_id is None:
+            track_id = self._new_track_id()
+        position = candidate.position
+        state = (position[0], position[1], 0.0, 0.0)
+        covariance = [
+            [candidate.uncertainty[0] ** 2, 0.0, 0.0, 0.0],
+            [0.0, candidate.uncertainty[1] ** 2, 0.0, 0.0],
+            [0.0, 0.0, 4.0, 0.0],
+            [0.0, 0.0, 0.0, 4.0],
+        ]
+        updated = self._make_track_memory(
+            track_id=track_id,
+            timestamp=candidate.timestamp,
+            state=state,
+            covariance=covariance,
+            confidence=candidate.confidence,
+            status="init",
+            hits=1,
+            misses=0,
+        )
+        self._tracks[track_id] = updated
+        return updated
+
+    def _make_track_memory(
+        self,
+        track_id: str,
+        timestamp: float,
+        state: Tuple[float, float, float, float],
+        covariance: List[List[float]],
+        confidence: float,
+        status: str,
+        hits: int,
+        misses: int,
+    ) -> _TrackMemory:
+        position = (state[0], state[1])
+        velocity = (state[2], state[3])
+        uncertainty = (
+            math.sqrt(max(covariance[0][0], 0.0)),
+            math.sqrt(max(covariance[1][1], 0.0)),
+        )
+        return _TrackMemory(
+            track_id=track_id,
+            timestamp=timestamp,
+            state=state,
+            covariance=covariance,
+            position=position,
+            velocity=velocity,
+            uncertainty=uncertainty,
+            confidence=confidence,
+            status=status,
+            hits=hits,
+            misses=misses,
+        )
+
+    def _to_track_state(self, track: _TrackMemory) -> TrackState:
+        return TrackState(
+            track_id=track.track_id,
+            timestamp=track.timestamp,
+            position=track.position,
+            velocity=track.velocity,
+            uncertainty=track.uncertainty,
+            confidence=track.confidence,
         )
 
     def _distance(self, left: Tuple[float, float], right: Tuple[float, float]) -> float:
@@ -317,6 +492,241 @@ class FusionPipeline:
     def _rssi_to_confidence(self, rssi: float) -> float:
         normalized = max(min((rssi + 100.0) / 60.0, 1.0), 0.0)
         return 0.2 + 0.8 * normalized
+
+    def _hungarian_assign(self, cost_matrix: List[List[float]]) -> List[Tuple[int, int]]:
+        if not cost_matrix or not cost_matrix[0]:
+            return []
+        row_count = len(cost_matrix)
+        col_count = len(cost_matrix[0])
+        size = max(row_count, col_count)
+        padded_cost = [row + [max(map(max, cost_matrix)) + 1.0] * (size - col_count) for row in cost_matrix]
+        for _ in range(size - row_count):
+            padded_cost.append([max(map(max, cost_matrix)) + 1.0] * size)
+
+        cost = [row[:] for row in padded_cost]
+        for i in range(size):
+            row_min = min(cost[i])
+            for j in range(size):
+                cost[i][j] -= row_min
+        for j in range(size):
+            col_min = min(cost[i][j] for i in range(size))
+            for i in range(size):
+                cost[i][j] -= col_min
+
+        star = [[False] * size for _ in range(size)]
+        prime = [[False] * size for _ in range(size)]
+        row_covered = [False] * size
+        col_covered = [False] * size
+
+        for i in range(size):
+            for j in range(size):
+                if cost[i][j] == 0 and not row_covered[i] and not col_covered[j]:
+                    star[i][j] = True
+                    row_covered[i] = True
+                    col_covered[j] = True
+        row_covered = [False] * size
+        col_covered = [False] * size
+
+        def cover_columns_with_star() -> None:
+            for j in range(size):
+                col_covered[j] = any(star[i][j] for i in range(size))
+
+        cover_columns_with_star()
+
+        while sum(col_covered) < size:
+            zero = None
+            while zero is None:
+                for i in range(size):
+                    if row_covered[i]:
+                        continue
+                    for j in range(size):
+                        if col_covered[j]:
+                            continue
+                        if cost[i][j] == 0:
+                            zero = (i, j)
+                            break
+                    if zero is not None:
+                        break
+                if zero is None:
+                    min_uncovered = min(
+                        cost[i][j]
+                        for i in range(size)
+                        if not row_covered[i]
+                        for j in range(size)
+                        if not col_covered[j]
+                    )
+                    for i in range(size):
+                        for j in range(size):
+                            if row_covered[i]:
+                                cost[i][j] += min_uncovered
+                            if not col_covered[j]:
+                                cost[i][j] -= min_uncovered
+            row, col = zero
+            prime[row][col] = True
+            star_col = next((j for j in range(size) if star[row][j]), None)
+            if star_col is None:
+                path = [(row, col)]
+                while True:
+                    star_row = next((i for i in range(size) if star[i][path[-1][1]]), None)
+                    if star_row is None:
+                        break
+                    path.append((star_row, path[-1][1]))
+                    prime_col = next(j for j in range(size) if prime[path[-1][0]][j])
+                    path.append((path[-1][0], prime_col))
+                for path_row, path_col in path:
+                    star[path_row][path_col] = not star[path_row][path_col]
+                prime = [[False] * size for _ in range(size)]
+                row_covered = [False] * size
+                col_covered = [False] * size
+                cover_columns_with_star()
+                zero = None
+            else:
+                row_covered[row] = True
+                col_covered[star_col] = False
+                zero = None
+
+        results = []
+        for i in range(size):
+            for j in range(size):
+                if star[i][j]:
+                    results.append((i, j))
+        return results
+
+    def _process_noise(self, dt: float, noise_scale: float) -> List[List[float]]:
+        dt2 = dt * dt
+        dt3 = dt2 * dt
+        dt4 = dt2 * dt2
+        q = noise_scale
+        return [
+            [q * dt4 / 4.0, 0.0, q * dt3 / 2.0, 0.0],
+            [0.0, q * dt4 / 4.0, 0.0, q * dt3 / 2.0],
+            [q * dt3 / 2.0, 0.0, q * dt2, 0.0],
+            [0.0, q * dt3 / 2.0, 0.0, q * dt2],
+        ]
+
+    def _mat_vec_mult_4x4(
+        self, matrix: List[List[float]], vector: Tuple[float, float, float, float]
+    ) -> Tuple[float, float, float, float]:
+        return (
+            matrix[0][0] * vector[0]
+            + matrix[0][1] * vector[1]
+            + matrix[0][2] * vector[2]
+            + matrix[0][3] * vector[3],
+            matrix[1][0] * vector[0]
+            + matrix[1][1] * vector[1]
+            + matrix[1][2] * vector[2]
+            + matrix[1][3] * vector[3],
+            matrix[2][0] * vector[0]
+            + matrix[2][1] * vector[1]
+            + matrix[2][2] * vector[2]
+            + matrix[2][3] * vector[3],
+            matrix[3][0] * vector[0]
+            + matrix[3][1] * vector[1]
+            + matrix[3][2] * vector[2]
+            + matrix[3][3] * vector[3],
+        )
+
+    def _mat_mult_4x4_4x4(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 4 for _ in range(4)]
+        for i in range(4):
+            for j in range(4):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(4))
+        return result
+
+    def _mat_mult_4x4_4x2(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 2 for _ in range(4)]
+        for i in range(4):
+            for j in range(2):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(4))
+        return result
+
+    def _mat_mult_4x2_2x4(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 4 for _ in range(4)]
+        for i in range(4):
+            for j in range(4):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(2))
+        return result
+
+    def _mat_mult_4x2_2x2(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 2 for _ in range(4)]
+        for i in range(4):
+            for j in range(2):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(2))
+        return result
+
+    def _mat_mult_2x4_4x4(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 4 for _ in range(2)]
+        for i in range(2):
+            for j in range(4):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(4))
+        return result
+
+    def _mat_mult_2x4_4x2(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        result = [[0.0] * 2 for _ in range(2)]
+        for i in range(2):
+            for j in range(2):
+                result[i][j] = sum(left[i][k] * right[k][j] for k in range(4))
+        return result
+
+    def _mat_add_4x4(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        return [
+            [left[i][j] + right[i][j] for j in range(4)]
+            for i in range(4)
+        ]
+
+    def _mat_sub_4x4(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        return [
+            [left[i][j] - right[i][j] for j in range(4)]
+            for i in range(4)
+        ]
+
+    def _mat_add_2x2(
+        self, left: List[List[float]], right: List[List[float]]
+    ) -> List[List[float]]:
+        return [
+            [left[i][j] + right[i][j] for j in range(2)]
+            for i in range(2)
+        ]
+
+    def _transpose_4x4(self, matrix: List[List[float]]) -> List[List[float]]:
+        return [[matrix[j][i] for j in range(4)] for i in range(4)]
+
+    def _transpose_2x4(self, matrix: List[List[float]]) -> List[List[float]]:
+        return [[matrix[j][i] for j in range(2)] for i in range(4)]
+
+    def _invert_2x2(self, matrix: List[List[float]]) -> List[List[float]]:
+        det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
+        if abs(det) < 1e-6:
+            return [[0.0, 0.0], [0.0, 0.0]]
+        inv_det = 1.0 / det
+        return [
+            [matrix[1][1] * inv_det, -matrix[0][1] * inv_det],
+            [-matrix[1][0] * inv_det, matrix[0][0] * inv_det],
+        ]
+
+    def _identity_4x4(self) -> List[List[float]]:
+        return [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
 
     def stream(self, inputs: Iterable[FusionInput]) -> Iterable[List[TrackState]]:
         for measurement in inputs:
