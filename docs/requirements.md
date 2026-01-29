@@ -76,3 +76,49 @@ config file. The CLI accepts BLE source entries with a `type`, `adapter_name`, a
   }
 }
 ```
+
+## Serial mmWave data formats
+The serial mmWave adapter accepts line-delimited payloads from UART/USB sensors. Each line can be
+one of the following formats:
+
+- **JSON object** (one per line):
+  ```json
+  {"timestamp_ms": 1700000000000, "sensor_id": "mmwave-1", "event_type": "presence", "confidence": 0.82}
+  ```
+- **CSV fields** (timestamp_ms, sensor_id, event_type, confidence, range_meters?, angle_degrees?):
+  ```text
+  1700000000000,mmwave-1,motion,45,3.1,90
+  ```
+- **Key=value pairs** (comma-separated):
+  ```text
+  sensor_id=mmwave-1,event_type=presence,confidence=1,timestamp=1700000000
+  ```
+
+Notes:
+- `confidence` values greater than 1 are treated as percentages (e.g., `45` becomes `0.45`).
+- `timestamp` is interpreted as seconds; `timestamp_ms` is interpreted as milliseconds.
+- `angle_degrees` is converted to radians during ingestion.
+
+## CLI configuration (mmWave serial sources)
+To ingest mmWave data over a serial port, configure `ingestion.mmwave_sources` with
+`type: "serial"`:
+
+```json
+{
+  "ingestion": {
+    "mmwave_sources": [
+      {
+        "type": "serial",
+        "port": "/dev/ttyUSB0",
+        "baudrate": 115200,
+        "timeout_seconds": 0.5,
+        "max_lines": 50,
+        "default_sensor_id": "mmwave-1",
+        "source_name": "serial_mmwave",
+        "source_metadata": {"vendor": "ti"},
+        "default_metadata": {"room": "lab"}
+      }
+    ]
+  }
+}
+```
