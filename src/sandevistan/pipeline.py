@@ -40,6 +40,7 @@ class FusionPipeline:
     sensor_config: SensorConfig
     space_config: SpaceConfig
     audit_logger: Optional[AuditLogger] = None
+    require_consent: bool = True
     retention_scheduler: Optional[RetentionScheduler] = None
     _tracks: Dict[str, _TrackMemory] = field(default_factory=dict, init=False, repr=False)
     _next_track_id: int = field(default=1, init=False, repr=False)
@@ -103,7 +104,8 @@ class FusionPipeline:
             updated_tracks.append(self._to_track_state(updated, alert_tier))
 
         if self.audit_logger and updated_tracks:
-            self.audit_logger.require_consent()
+            if self.require_consent:
+                self.audit_logger.require_consent()
             for update in updated_tracks:
                 self.audit_logger.log_sensor_provenance(
                     track_id=update.track_id,

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Mapping, MutableMapping, Optional, Sequence
 
+from .audit import AuditLogger
 from .config import (
     AccessPointCalibration,
     CameraCalibration,
@@ -759,17 +760,41 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _parse_audit_config(
+    payload: Mapping[str, object],
+) -> tuple[Optional[AuditLogger], bool]:
+    audit_enabled = bool(payload.get("enabled", False))
+    if not audit_enabled:
+        return None, False
+    audit_logger = AuditLogger()
+    consent_entries = _require_sequence(payload.get("consent_records", []), "audit.consent_records")
+    for idx, entry in enumerate(consent_entries):
+        entry_map = _require_mapping(entry, f"audit.consent_records[{idx}]")
+        status = _require_non_empty(entry_map.get("status"), "audit.consent_records.status")
+        participant_id = _optional_str(entry_map.get("participant_id"))
+        session_id = _optional_str(entry_map.get("session_id"))
+        audit_logger.record_consent(
+            status=status,
+            participant_id=participant_id,
+            session_id=session_id,
+        )
+    require_consent = bool(payload.get("require_consent", False))
+    return audit_logger, require_consent
+
+
 def _build_pipeline(config: Mapping[str, object]) -> tuple[FusionPipeline, IngestionOrchestrator]:
     space_payload = _require_mapping(config.get("space", {}), "space")
     sensors_payload = _require_mapping(config.get("sensors", {}), "sensors")
     ingestion_payload = _require_mapping(config.get("ingestion", {}), "ingestion")
     sync_payload = _require_mapping(config.get("synchronization", {}), "synchronization")
     retention_payload = _require_mapping(config.get("retention", {}), "retention")
+    audit_payload = _require_mapping(config.get("audit", {}), "audit")
 
     space_config = _parse_space_config(space_payload)
     sensor_config = _parse_sensor_config(sensors_payload)
     sync_buffer = _parse_sync_config(sync_payload)
     retention_config = _parse_retention_config(retention_payload)
+    audit_logger, require_consent = _parse_audit_config(audit_payload)
 
     wifi_sources = _parse_wifi_sources(
         _require_sequence(ingestion_payload.get("wifi_sources", []), "ingestion.wifi_sources"),
@@ -791,12 +816,13 @@ def _build_pipeline(config: Mapping[str, object]) -> tuple[FusionPipeline, Inges
     retention_scheduler = RetentionScheduler(
         retention_config=retention_config,
         buffer=sync_buffer,
-        audit_logger=None,
+        audit_logger=audit_logger,
     )
     pipeline = FusionPipeline(
         sensor_config=sensor_config,
         space_config=space_config,
-        audit_logger=None,
+        audit_logger=audit_logger,
+        require_consent=require_consent,
         retention_scheduler=retention_scheduler,
     )
     orchestrator = IngestionOrchestrator(
