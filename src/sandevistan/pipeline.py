@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .audit import AuditLogger
 from .config import SensorConfig, SpaceConfig
-from .models import BLEMeasurement, FusionInput, MmWaveMeasurement, TrackState
+from .models import BLEMeasurement, FusionInput, MmWaveMeasurement, TrackState, WiFiMeasurement
 from .retention import RetentionScheduler
 
 
@@ -68,6 +68,12 @@ class FusionPipeline:
             measurements.mmwave,
             measurements.ble,
         )
+        alert_tier = self._classify_alert_tier(
+            synced_wifi,
+            synced_vision,
+            synced_mmwave,
+            synced_ble,
+        )
         sources = self._collect_sources(
             synced_wifi,
             synced_vision,
@@ -83,16 +89,16 @@ class FusionPipeline:
         for track_id, candidate in assignments:
             updated = self._update_track(track_id, candidate)
             if updated.status != "terminated":
-                updated_tracks.append(self._to_track_state(updated))
+                updated_tracks.append(self._to_track_state(updated, alert_tier))
 
         for track_id in unassigned_tracks:
             updated = self._mark_missed(track_id, reference_time)
             if updated and updated.status != "terminated":
-                updated_tracks.append(self._to_track_state(updated))
+                updated_tracks.append(self._to_track_state(updated, alert_tier))
 
         for candidate in unassigned_candidates:
             updated = self._initialize_track(candidate)
-            updated_tracks.append(self._to_track_state(updated))
+            updated_tracks.append(self._to_track_state(updated, alert_tier))
 
         if self.audit_logger and updated_tracks:
             self.audit_logger.require_consent()
@@ -543,7 +549,7 @@ class FusionPipeline:
             misses=misses,
         )
 
-    def _to_track_state(self, track: _TrackMemory) -> TrackState:
+    def _to_track_state(self, track: _TrackMemory, alert_tier: str) -> TrackState:
         return TrackState(
             track_id=track.track_id,
             timestamp=track.timestamp,
@@ -551,7 +557,44 @@ class FusionPipeline:
             velocity=track.velocity,
             uncertainty=track.uncertainty,
             confidence=track.confidence,
+            alert_tier=alert_tier,
         )
+
+    def _classify_alert_tier(
+        self,
+        wifi: Sequence[WiFiMeasurement],
+        vision: Sequence,
+        mmwave: Sequence[MmWaveMeasurement],
+        ble: Sequence[BLEMeasurement],
+    ) -> str:
+        mmwave_present = bool(mmwave)
+        vision_present = bool(vision)
+        wifi_anomaly = self._has_wifi_anomaly(wifi)
+        ble_present = bool(ble)
+
+        if mmwave_present and vision_present:
+            return "red"
+        if mmwave_present and wifi_anomaly:
+            return "orange"
+        if mmwave_present:
+            return "yellow"
+        if wifi_anomaly:
+            return "orange"
+        if ble_present:
+            return "blue"
+        return "none"
+
+    def _has_wifi_anomaly(self, wifi: Sequence[WiFiMeasurement]) -> bool:
+        for measurement in wifi:
+            if not measurement.metadata:
+                continue
+            metadata = measurement.metadata
+            if metadata.get("anomaly") is True or metadata.get("is_anomaly") is True:
+                return True
+            score = metadata.get("anomaly_score", metadata.get("anomaly_confidence"))
+            if isinstance(score, (int, float)) and score >= 0.7:
+                return True
+        return False
 
     def _distance(self, left: Tuple[float, float], right: Tuple[float, float]) -> float:
         return math.hypot(left[0] - right[0], left[1] - right[1])

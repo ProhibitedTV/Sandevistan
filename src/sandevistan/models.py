@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Optional, Sequence, Tuple
+from typing import Literal, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,9 @@ class FusionInput:
     ble: Sequence[BLEMeasurement]
 
 
+AlertTier = Literal["none", "blue", "yellow", "orange", "red"]
+
+
 @dataclass(frozen=True)
 class TrackState:
     track_id: str
@@ -87,3 +90,4 @@ class TrackState:
     velocity: Optional[Tuple[float, float]]
     uncertainty: Tuple[float, float]
     confidence: float
+    alert_tier: AlertTier = "none"
