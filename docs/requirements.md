@@ -49,3 +49,22 @@ This project targets **indoor localization and tracking** of consenting particip
 - Retention is **disabled by default** and must be explicitly enabled.
 - When enabled, configure separate TTLs for measurements and audit logs.
 - Scheduled cleanup runs on a configurable interval; defaults to 60 seconds.
+
+## CLI configuration (BLE sources)
+When using the fusion CLI, BLE scanners are configured under `ingestion.ble_sources` in the JSON
+config file. The CLI accepts BLE source entries with a `type`, `adapter_name`, and
+`scan_interval_seconds` to control how often a scanner should emit advertisements:
+
+```json
+{
+  "ingestion": {
+    "ble_sources": [
+      {
+        "type": "static",
+        "adapter_name": "ble-scanner-01",
+        "scan_interval_seconds": 1.0
+      }
+    ]
+  }
+}
+```
