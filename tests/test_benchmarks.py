@@ -24,6 +24,7 @@ def _make_pipeline() -> FusionPipeline:
                 extrinsics=CameraExtrinsics(translation=(0.0, 0.0), rotation_radians=0.0),
             )
         },
+        mmwave_sensors={},
     )
     space_config = SpaceConfig(width_meters=10.0, height_meters=10.0)
     return FusionPipeline(sensor_config=sensor_config, space_config=space_config)

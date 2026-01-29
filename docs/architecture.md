@@ -11,11 +11,13 @@
 3. **mmWave Ingestion**
    - Accepts presence/motion events from mmWave sensors.
    - Normalizes timestamp, confidence, and optional range/angle metadata.
+   - Uses configured sensor placement metadata (position/orientation) to project range/angle
+     events into world coordinates for fusion.
 4. **Synchronization Layer**
    - Aligns multi-sensor measurements to a shared time window.
    - Buffers and interpolates as needed.
 5. **Fusion Engine**
-   - Combines Wi-Fi and vision measurements into a shared state estimate.
+   - Combines Wi-Fi, vision, and mmWave measurements into a shared state estimate.
    - Computes uncertainty and confidence bounds.
 6. **Tracker**
    - Maintains identity over time (track association).
