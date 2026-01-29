@@ -3,6 +3,11 @@
 ## Purpose
 This project is a **research prototype** for indoor localization using multi-sensor fusion. It is not intended for covert surveillance or any application that violates privacy rights.
 
+## Legal and ethical constraints
+- **Lawful operation only**: RF scanning, Wi-Fi/BLE telemetry collection, and any other sensing must be performed in compliance with applicable laws, spectrum regulations, and venue policies.
+- **Authorization required**: Scan only networks, devices, or environments you own or explicitly have permission to assess.
+- **No deceptive claims**: Do not claim or market the system as “x-ray vision,” through-wall imaging, or guaranteed through-wall detection; such claims are misleading and prohibited.
+
 ## Prohibited uses
 - Tracking or monitoring individuals without explicit, informed consent.
 - Use in locations where participants are not clearly notified and able to opt out.

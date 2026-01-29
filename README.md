@@ -11,6 +11,11 @@ This repository contains an early-stage prototype framework inspired by the *San
 - This project does **not** enable clandestine or non-consensual surveillance.
 - This project does **not** provide “X-ray vision.” Results are probabilistic and bounded by sensor limitations.
 
+## Limitations
+- Wi-Fi sensing is environment-dependent and can degrade with interference, sparse access point layouts, or low sampling rates.
+- mmWave sensors provide short-range, coarse presence/motion cues that can be affected by multipath and occlusions.
+- All RF-based measurements are probabilistic and should be treated as corroborating evidence, not guarantees.
+
 ## Repository layout
 - `docs/requirements.md`: Product requirements and performance targets.
 - `docs/architecture.md`: System architecture and data flow.
