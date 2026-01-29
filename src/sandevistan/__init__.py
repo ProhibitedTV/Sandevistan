@@ -12,11 +12,13 @@ from .config import (
 )
 from .display import LiveTrackerDisplay, render_from_stream
 from .models import (
+    BLEMeasurement,
     Detection,
     FusionInput,
     MmWaveMeasurement,
     TrackState,
     WiFiMeasurement,
+    validate_ble_measurement,
     validate_mmwave_measurement,
 )
 from .pipeline import FusionPipeline
@@ -38,8 +40,10 @@ __all__ = [
     "Detection",
     "FusionInput",
     "MmWaveMeasurement",
+    "BLEMeasurement",
     "TrackState",
     "WiFiMeasurement",
+    "validate_ble_measurement",
     "validate_mmwave_measurement",
     "FusionPipeline",
     "RetentionScheduler",

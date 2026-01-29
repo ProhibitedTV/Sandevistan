@@ -65,3 +65,4 @@ class IngestionConfig:
     wifi_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
     vision_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
     mmwave_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)
+    ble_sources: Sequence[Mapping[str, object]] = field(default_factory=tuple)

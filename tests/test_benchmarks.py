@@ -52,6 +52,8 @@ def test_latency_budget_per_frame() -> None:
         FusionInput(
             wifi=[],
             vision=[_make_detection(idx * 0.05, (0.5, 0.5))],
+            mmwave=[],
+            ble=[],
         )
         for idx in range(200)
     ]
@@ -72,7 +74,9 @@ def test_localization_accuracy_median_error() -> None:
     errors = []
     for idx, center in enumerate(ground_truth):
         detection = _make_detection(idx * 0.1, center)
-        outputs = pipeline.fuse(FusionInput(wifi=[], vision=[detection]))
+        outputs = pipeline.fuse(
+            FusionInput(wifi=[], vision=[detection], mmwave=[], ble=[])
+        )
         assert outputs
         position = outputs[0].position
         truth = (center[0] * 10.0, center[1] * 10.0)
@@ -91,7 +95,9 @@ def test_tracking_reliability_ratio() -> None:
 
     for idx in range(total_frames):
         detection = _make_detection(idx * 0.1, (0.5, 0.5))
-        outputs = pipeline.fuse(FusionInput(wifi=[], vision=[detection]))
+        outputs = pipeline.fuse(
+            FusionInput(wifi=[], vision=[detection], mmwave=[], ble=[])
+        )
         if outputs:
             if baseline_id is None:
                 baseline_id = outputs[0].track_id

@@ -5,11 +5,14 @@ This project targets **indoor localization and tracking** of consenting particip
 - Wi-Fi signal metrics (e.g., RSSI/CSI) from known access points.
 - Camera-based detections from fixed-position cameras.
 - mmWave presence/motion events from short-range sensors.
+- BLE advertisement beacons from nearby devices when available.
 
 ## Inputs
 - Wi-Fi measurements: timestamped signal strength / channel state information.
 - Vision detections: timestamped bounding boxes and optional pose/keypoint data.
 - mmWave events: timestamped presence/motion indicators with optional range/angle metadata.
+- BLE advertisements: timestamped RSSI measurements with optional device identifiers and
+  manufacturer metadata.
 - Spatial configuration: a coordinate system, floor plan dimensions, and sensor placements.
 
 ## Outputs
@@ -29,6 +32,10 @@ This project targets **indoor localization and tracking** of consenting particip
 - mmWave sensors may provide coarse range/angle estimates and can be impacted by multipath
   reflections or occlusions; treat mmWave signals as corroborating evidence rather than a
   precise localization source.
+- BLE scans are passive and only observe broadcast advertisements; they do not establish
+  connections, and measurements are limited to nearby devices advertising on channels
+  37–39. RSSI values can fluctuate due to interference, body absorption, and antenna
+  orientation, so BLE data should be treated as a coarse proximity signal.
 
 ## Data retention defaults
 - Retention is **disabled by default** and must be explicitly enabled.

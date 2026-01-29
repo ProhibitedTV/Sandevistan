@@ -34,6 +34,16 @@ class MmWaveMeasurement:
     metadata: Optional[dict] = None
 
 
+@dataclass(frozen=True)
+class BLEMeasurement:
+    timestamp: float
+    rssi: float
+    device_id: Optional[str] = None
+    hashed_identifier: Optional[str] = None
+    channel: Optional[int] = None
+    manufacturer_data: Optional[dict] = None
+
+
 def validate_mmwave_measurement(measurement: MmWaveMeasurement) -> None:
     if not measurement.sensor_id:
         raise ValueError("mmWave sensor_id must be set.")
@@ -50,11 +60,23 @@ def validate_mmwave_measurement(measurement: MmWaveMeasurement) -> None:
             raise ValueError("mmWave angle_radians must be between -pi and pi.")
 
 
+def validate_ble_measurement(measurement: BLEMeasurement) -> None:
+    if not measurement.device_id and not measurement.hashed_identifier:
+        raise ValueError("BLE measurement must include device_id or hashed_identifier.")
+    if measurement.timestamp < 0:
+        raise ValueError("BLE timestamp must be non-negative.")
+    if not math.isfinite(measurement.rssi):
+        raise ValueError("BLE rssi must be a finite number.")
+    if measurement.channel is not None and measurement.channel not in {37, 38, 39}:
+        raise ValueError("BLE channel must be 37, 38, or 39 when provided.")
+
+
 @dataclass(frozen=True)
 class FusionInput:
     wifi: Sequence[WiFiMeasurement]
     vision: Sequence[Detection]
     mmwave: Sequence[MmWaveMeasurement]
+    ble: Sequence[BLEMeasurement]
 
 
 @dataclass(frozen=True)
