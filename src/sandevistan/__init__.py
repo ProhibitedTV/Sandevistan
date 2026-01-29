@@ -11,7 +11,14 @@ from .config import (
     SpaceConfig,
 )
 from .display import LiveTrackerDisplay, render_from_stream
-from .models import Detection, FusionInput, TrackState, WiFiMeasurement
+from .models import (
+    Detection,
+    FusionInput,
+    MmWaveMeasurement,
+    TrackState,
+    WiFiMeasurement,
+    validate_mmwave_measurement,
+)
 from .pipeline import FusionPipeline
 from .retention import RetentionScheduler
 from .sync import SyncBatch, SyncStatus, SynchronizationBuffer
@@ -30,8 +37,10 @@ __all__ = [
     "InMemoryConsentStore",
     "Detection",
     "FusionInput",
+    "MmWaveMeasurement",
     "TrackState",
     "WiFiMeasurement",
+    "validate_mmwave_measurement",
     "FusionPipeline",
     "RetentionScheduler",
     "SyncBatch",

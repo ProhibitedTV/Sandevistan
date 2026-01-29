@@ -8,13 +8,16 @@
 2. **Vision Ingestion**
    - Accepts camera detections (boxes, keypoints) with timestamps.
    - Optionally performs camera-to-world transforms.
-3. **Synchronization Layer**
+3. **mmWave Ingestion**
+   - Accepts presence/motion events from mmWave sensors.
+   - Normalizes timestamp, confidence, and optional range/angle metadata.
+4. **Synchronization Layer**
    - Aligns multi-sensor measurements to a shared time window.
    - Buffers and interpolates as needed.
-4. **Fusion Engine**
+5. **Fusion Engine**
    - Combines Wi-Fi and vision measurements into a shared state estimate.
    - Computes uncertainty and confidence bounds.
-5. **Tracker**
+6. **Tracker**
    - Maintains identity over time (track association).
    - Emits track updates to downstream consumers.
 
@@ -23,11 +26,13 @@
 Wi-Fi measurements   ->  Wi-Fi Ingestion  ->
                                              -> Sync -> Fusion -> Tracker -> Outputs
 Camera detections    -> Vision Ingestion ->
+mmWave events        -> mmWave Ingestion ->
 ```
 
 ## Interfaces
 - **Wi-Fi measurement schema**: `{timestamp, ap_id, rssi, csi?, metadata}`
 - **Vision detection schema**: `{timestamp, camera_id, bbox, confidence, keypoints?}`
+- **mmWave event schema**: `{timestamp, sensor_id, confidence, event_type, range_meters?, angle_radians?}`
 - **Fusion output**: `{timestamp, track_id, position, velocity?, uncertainty}`
 - **Audit log schema**
   - **Sensor provenance log**: `{track_id, timestamp, sources, captured_at}`

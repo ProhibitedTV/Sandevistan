@@ -1,6 +1,12 @@
-"""Ingestion helpers for Wi-Fi and vision sensor payloads."""
+"""Ingestion helpers for Wi-Fi, vision, and mmWave sensor payloads."""
 
-from .orchestrator import IngestionOrchestrator, VisionSource, WiFiSource
+from .mmwave import MmWaveIngestionError, parse_mmwave_measurements
+from .mmwave_exporter import (
+    HTTPMmWaveExporterAdapter,
+    HTTPMmWaveExporterConfig,
+    MmWaveExporterError,
+)
+from .orchestrator import IngestionOrchestrator, MmWaveSource, VisionSource, WiFiSource
 from .vision import DetectionIngestionError, parse_detections
 from .vision_exporter import (
     HTTPVisionExporterAdapter,
@@ -18,11 +24,16 @@ from .wifi_exporter import (
 
 __all__ = [
     "DetectionIngestionError",
+    "HTTPMmWaveExporterAdapter",
+    "HTTPMmWaveExporterConfig",
     "HTTPWiFiExporterAdapter",
     "HTTPWiFiExporterConfig",
     "HTTPVisionExporterAdapter",
     "HTTPVisionExporterConfig",
     "IngestionOrchestrator",
+    "MmWaveExporterError",
+    "MmWaveIngestionError",
+    "MmWaveSource",
     "ProcessVisionExporterAdapter",
     "ProcessVisionExporterConfig",
     "WiFiExporterError",
@@ -31,5 +42,6 @@ __all__ = [
     "VisionSource",
     "WiFiSource",
     "parse_detections",
+    "parse_mmwave_measurements",
     "parse_wifi_measurements",
 ]
