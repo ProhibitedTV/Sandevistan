@@ -1,0 +1,69 @@
+{
+  "space": {
+    "width_meters": 8.0,
+    "height_meters": 5.0,
+    "coordinate_origin": [0.0, 0.0]
+  },
+  "sensors": {
+    "wifi_access_points": {
+      "demo-ap-1": {
+        "position": [1.0, 1.0],
+        "position_uncertainty_meters": 0.5
+      }
+    },
+    "cameras": {
+      "demo-cam-1": {
+        "intrinsics": {
+          "focal_length": [800.0, 800.0],
+          "principal_point": [640.0, 360.0],
+          "skew": 0.0
+        },
+        "extrinsics": {
+          "translation": [2.0, 1.0],
+          "rotation_radians": 0.0
+        }
+      }
+    },
+    "mmwave_sensors": {}
+  },
+  "ingestion": {
+    "vision_sources": [
+      {
+        "type": "process",
+        "command": ["python", "scripts/demo_vision_exporter.py"],
+        "default_camera_id": "demo-cam-1"
+      }
+    ],
+    "ble_sources": [
+      {
+        "type": "static",
+        "adapter_name": "demo-ble-1",
+        "scan_interval_seconds": 1.0,
+        "measurements": [
+          {
+            "timestamp": 1700000000.0,
+            "rssi": -55.0,
+            "device_id": "demo-tag-01"
+          }
+        ]
+      }
+    ],
+    "wifi_sources": [
+      {
+        "type": "http",
+        "endpoint_url": "http://127.0.0.1:8081/wifi",
+        "access_point_id": "demo-ap-1"
+      }
+    ],
+    "mmwave_sources": []
+  },
+  "synchronization": {
+    "window_seconds": 0.25,
+    "max_latency_seconds": 0.25,
+    "strategy": "nearest"
+  },
+  "retention": {
+    "enabled": false,
+    "cleanup_interval_seconds": 60.0
+  }
+}

@@ -6,6 +6,28 @@
 - Local storage for short-lived logs and metrics (in-memory by default; optional TTL-based retention).
 - Time synchronization across sensor hosts (NTP or equivalent) to keep timestamps aligned.
 
+## Desktop demo (no hardware)
+Use the sample config and demo scripts to exercise the pipeline on a laptop without any sensors.
+
+1. Start the optional Wi-Fi HTTP stub (required only if the sample config keeps Wi-Fi enabled):
+
+   ```bash
+   python scripts/demo_wifi_exporter.py --port 8081
+   ```
+
+2. The vision demo is invoked automatically by the config via
+   `scripts/demo_vision_exporter.py` (the process exporter prints JSON detections to stdout).
+
+3. In another terminal, run the fusion CLI and pipe it into the display:
+
+   ```bash
+   python -m sandevistan.cli --config docs/demo-desktop-config.json --poll-interval 0.5 \
+     | python -m sandevistan.display --space-width 8 --space-height 5
+   ```
+
+4. Optional: if you do not want Wi-Fi in the demo, remove the `ingestion.wifi_sources` block from
+   `docs/demo-desktop-config.json` and skip step 1.
+
 ## Wi-Fi telemetry sources
 Supported ingestion methods today focus on **HTTP JSON exporters** that run on or near the target
 AP/router. Typical deployments use:
