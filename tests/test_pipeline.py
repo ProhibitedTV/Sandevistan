@@ -76,7 +76,7 @@ def _to_space(position: tuple[float, float]) -> tuple[float, float]:
 def test_fuse_empty_input_returns_empty_list() -> None:
     pipeline = _make_pipeline()
 
-    result = pipeline.fuse(FusionInput(wifi=[], vision=[]))
+    result = pipeline.fuse(FusionInput(wifi=[], vision=[], mmwave=[], ble=[]))
 
     assert result == []
 
@@ -90,7 +90,9 @@ def test_track_continuity_across_frames() -> None:
     for timestamp, center in zip(timestamps, centers):
         detection = _make_detection(timestamp, center)
         wifi = [_make_wifi(timestamp, "ap-1", rssi=-45.0)]
-        outputs = pipeline.fuse(FusionInput(wifi=wifi, vision=[detection]))
+        outputs = pipeline.fuse(
+            FusionInput(wifi=wifi, vision=[detection], mmwave=[], ble=[])
+        )
         assert len(outputs) == 1
         track_ids.append(outputs[0].track_id)
 
@@ -105,7 +107,9 @@ def test_track_position_updates_smoothly() -> None:
     positions = []
     for timestamp, center in zip(timestamps, centers):
         detection = _make_detection(timestamp, center)
-        outputs = pipeline.fuse(FusionInput(wifi=[], vision=[detection]))
+        outputs = pipeline.fuse(
+            FusionInput(wifi=[], vision=[detection], mmwave=[], ble=[])
+        )
         assert outputs
         positions.append(outputs[0].position)
 
@@ -132,6 +136,8 @@ def test_multi_target_overlap_keeps_consistent_ids() -> None:
                 _make_detection(timestamps[0], target_a[0]),
                 _make_detection(timestamps[0], target_b[0]),
             ],
+            mmwave=[],
+            ble=[],
         )
     )
     assert len(initial_tracks) == 2
@@ -144,7 +150,9 @@ def test_multi_target_overlap_keeps_consistent_ids() -> None:
             _make_detection(timestamps[idx], target_a[idx]),
             _make_detection(timestamps[idx], target_b[idx]),
         ]
-        tracks = pipeline.fuse(FusionInput(wifi=[], vision=detections))
+        tracks = pipeline.fuse(
+            FusionInput(wifi=[], vision=detections, mmwave=[], ble=[])
+        )
         assert len(tracks) == 2
         assert _closest_track_id(tracks, _to_space(target_a[idx])) == target_a_id
         assert _closest_track_id(tracks, _to_space(target_b[idx])) == target_b_id
@@ -163,6 +171,8 @@ def test_track_persists_through_occlusion() -> None:
                 _make_detection(timestamps[0], target_a[0]),
                 _make_detection(timestamps[0], target_b[0]),
             ],
+            mmwave=[],
+            ble=[],
         )
     )
     assert len(initial_tracks) == 2
@@ -175,6 +185,8 @@ def test_track_persists_through_occlusion() -> None:
                 _make_detection(timestamps[1], target_a[1]),
                 _make_detection(timestamps[1], target_b[1]),
             ],
+            mmwave=[],
+            ble=[],
         )
     )
     assert len(tracks) == 2
@@ -183,6 +195,8 @@ def test_track_persists_through_occlusion() -> None:
         FusionInput(
             wifi=[],
             vision=[_make_detection(timestamps[2], target_a[2])],
+            mmwave=[],
+            ble=[],
         )
     )
     assert len(occluded) == 2
@@ -195,6 +209,8 @@ def test_track_persists_through_occlusion() -> None:
                 _make_detection(timestamps[3], target_a[3]),
                 _make_detection(timestamps[3], target_b[3]),
             ],
+            mmwave=[],
+            ble=[],
         )
     )
     assert len(reappeared) == 2

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import time
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-from .models import Detection, FusionInput, MmWaveMeasurement, WiFiMeasurement
+from .models import BLEMeasurement, Detection, FusionInput, MmWaveMeasurement, WiFiMeasurement
 
 
 @dataclass(frozen=True)
@@ -13,9 +13,11 @@ class SyncStatus:
     wifi_stale: bool
     vision_stale: bool
     mmwave_stale: bool
+    ble_stale: bool
     dropped_wifi: int
     dropped_vision: int
     dropped_mmwave: int
+    dropped_ble: int
     window_seconds: float
     max_latency_seconds: float
     strategy: str
@@ -29,7 +31,7 @@ class SyncBatch:
 
 @dataclass
 class SynchronizationBuffer:
-    """Buffer Wi-Fi, vision, and mmWave measurements and emit aligned FusionInput batches."""
+    """Buffer Wi-Fi, vision, mmWave, and BLE measurements and emit aligned FusionInput batches."""
 
     window_seconds: float = 0.25
     max_latency_seconds: float = 0.25
@@ -37,6 +39,7 @@ class SynchronizationBuffer:
     _wifi: List[WiFiMeasurement] = field(default_factory=list, init=False, repr=False)
     _vision: List[Detection] = field(default_factory=list, init=False, repr=False)
     _mmwave: List[MmWaveMeasurement] = field(default_factory=list, init=False, repr=False)
+    _ble: List[BLEMeasurement] = field(default_factory=list, init=False, repr=False)
 
     def add_wifi(self, measurements: Iterable[WiFiMeasurement]) -> None:
         self._wifi.extend(measurements)
@@ -53,20 +56,27 @@ class SynchronizationBuffer:
         self._mmwave.sort(key=lambda item: item.timestamp)
         self._prune_window(self._mmwave)
 
+    def add_ble(self, measurements: Iterable[BLEMeasurement]) -> None:
+        self._ble.extend(measurements)
+        self._ble.sort(key=lambda item: item.timestamp)
+        self._prune_window(self._ble)
+
     def emit(self, reference_time: Optional[float] = None) -> Optional[SyncBatch]:
-        if not self._wifi and not self._vision and not self._mmwave:
+        if not self._wifi and not self._vision and not self._mmwave and not self._ble:
             return None
 
         reference_time = reference_time or self._latest_timestamp()
         dropped_wifi = self._drop_stale(self._wifi, reference_time)
         dropped_vision = self._drop_stale(self._vision, reference_time)
         dropped_mmwave = self._drop_stale(self._mmwave, reference_time)
+        dropped_ble = self._drop_stale(self._ble, reference_time)
 
         wifi_aligned, wifi_stale = self._align_wifi(reference_time)
         vision_aligned, vision_stale = self._align_vision(reference_time)
         mmwave_aligned, mmwave_stale = self._align_mmwave(reference_time)
+        ble_aligned, ble_stale = self._align_ble(reference_time)
 
-        if not wifi_aligned and not vision_aligned and not mmwave_aligned:
+        if not wifi_aligned and not vision_aligned and not mmwave_aligned and not ble_aligned:
             return None
 
         status = SyncStatus(
@@ -74,9 +84,11 @@ class SynchronizationBuffer:
             wifi_stale=wifi_stale,
             vision_stale=vision_stale,
             mmwave_stale=mmwave_stale,
+            ble_stale=ble_stale,
             dropped_wifi=dropped_wifi,
             dropped_vision=dropped_vision,
             dropped_mmwave=dropped_mmwave,
+            dropped_ble=dropped_ble,
             window_seconds=self.window_seconds,
             max_latency_seconds=self.max_latency_seconds,
             strategy=self.strategy,
@@ -86,6 +98,7 @@ class SynchronizationBuffer:
                 wifi=wifi_aligned,
                 vision=vision_aligned,
                 mmwave=mmwave_aligned,
+                ble=ble_aligned,
             ),
             status=status,
         )
@@ -98,6 +111,8 @@ class SynchronizationBuffer:
             latest = max(latest, self._vision[-1].timestamp)
         if self._mmwave:
             latest = max(latest, self._mmwave[-1].timestamp)
+        if self._ble:
+            latest = max(latest, self._ble[-1].timestamp)
         return latest
 
     def prune_history(
@@ -105,9 +120,9 @@ class SynchronizationBuffer:
         *,
         ttl_seconds: float,
         reference_time: Optional[float] = None,
-    ) -> Tuple[int, int]:
+    ) -> Tuple[int, int, int, int]:
         if ttl_seconds <= 0:
-            return 0, 0, 0
+            return 0, 0, 0, 0
         if reference_time is None:
             latest = self._latest_timestamp()
             reference_time = latest or time.time()
@@ -115,7 +130,8 @@ class SynchronizationBuffer:
         wifi_deleted = self._drop_before(self._wifi, cutoff)
         vision_deleted = self._drop_before(self._vision, cutoff)
         mmwave_deleted = self._drop_before(self._mmwave, cutoff)
-        return wifi_deleted, vision_deleted, mmwave_deleted
+        ble_deleted = self._drop_before(self._ble, cutoff)
+        return wifi_deleted, vision_deleted, mmwave_deleted, ble_deleted
 
     def _prune_window(self, items: List) -> None:
         if not items:
@@ -193,6 +209,27 @@ class SynchronizationBuffer:
         stale = reference_time - latest_timestamp > self.max_latency_seconds
         return aligned, stale
 
+    def _align_ble(self, reference_time: float) -> Tuple[List[BLEMeasurement], bool]:
+        if not self._ble:
+            return [], True
+        grouped: dict[str, List[BLEMeasurement]] = {}
+        for measurement in self._ble:
+            grouped.setdefault(self._ble_identifier(measurement), []).append(measurement)
+
+        aligned: List[BLEMeasurement] = []
+        for measurements in grouped.values():
+            match = self._nearest_ble(measurements, reference_time)
+            if match is not None:
+                aligned.append(match)
+
+        latest_timestamp = self._ble[-1].timestamp if self._ble else 0.0
+        stale = reference_time - latest_timestamp > self.max_latency_seconds
+        return aligned, stale
+
+    @staticmethod
+    def _ble_identifier(measurement: BLEMeasurement) -> str:
+        return measurement.device_id or measurement.hashed_identifier or "unknown"
+
     def _match_measurement(
         self,
         measurements: Sequence[WiFiMeasurement],
@@ -242,6 +279,16 @@ class SynchronizationBuffer:
         measurements: Sequence[MmWaveMeasurement],
         reference_time: float,
     ) -> Optional[MmWaveMeasurement]:
+        nearest = min(measurements, key=lambda item: abs(item.timestamp - reference_time))
+        if abs(nearest.timestamp - reference_time) > self.window_seconds:
+            return None
+        return nearest
+
+    def _nearest_ble(
+        self,
+        measurements: Sequence[BLEMeasurement],
+        reference_time: float,
+    ) -> Optional[BLEMeasurement]:
         nearest = min(measurements, key=lambda item: abs(item.timestamp - reference_time))
         if abs(nearest.timestamp - reference_time) > self.window_seconds:
             return None

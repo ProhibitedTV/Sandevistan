@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .audit import AuditLogger
 from .config import SensorConfig, SpaceConfig
-from .models import FusionInput, MmWaveMeasurement, TrackState
+from .models import BLEMeasurement, FusionInput, MmWaveMeasurement, TrackState
 from .retention import RetentionScheduler
 
 
@@ -54,13 +54,26 @@ class FusionPipeline:
         This method is intentionally minimal; real implementations should include
         synchronization, filtering, and track association.
         """
-        if not measurements.wifi and not measurements.vision and not measurements.mmwave:
+        if (
+            not measurements.wifi
+            and not measurements.vision
+            and not measurements.mmwave
+            and not measurements.ble
+        ):
             return []
 
-        synced_wifi, synced_vision, synced_mmwave, reference_time = self._synchronize(
-            measurements.wifi, measurements.vision, measurements.mmwave
+        synced_wifi, synced_vision, synced_mmwave, synced_ble, reference_time = self._synchronize(
+            measurements.wifi,
+            measurements.vision,
+            measurements.mmwave,
+            measurements.ble,
         )
-        sources = self._collect_sources(synced_wifi, synced_vision, synced_mmwave)
+        sources = self._collect_sources(
+            synced_wifi,
+            synced_vision,
+            synced_mmwave,
+            synced_ble,
+        )
         candidates = self._build_candidates(synced_wifi, synced_vision, reference_time)
         assignments, unassigned_tracks, unassigned_candidates = self._associate_tracks(
             candidates, reference_time
@@ -102,8 +115,9 @@ class FusionPipeline:
         wifi: Sequence,
         vision: Sequence,
         mmwave: Sequence,
+        ble: Sequence,
         window_seconds: float = 0.5,
-    ) -> Tuple[Sequence, Sequence, Sequence, float]:
+    ) -> Tuple[Sequence, Sequence, Sequence, Sequence, float]:
         reference_time = 0.0
         if wifi:
             reference_time = max(reference_time, max(m.timestamp for m in wifi))
@@ -111,6 +125,8 @@ class FusionPipeline:
             reference_time = max(reference_time, max(m.timestamp for m in vision))
         if mmwave:
             reference_time = max(reference_time, max(m.timestamp for m in mmwave))
+        if ble:
+            reference_time = max(reference_time, max(m.timestamp for m in ble))
 
         def _filter(seq: Sequence) -> Sequence:
             if not seq:
@@ -121,13 +137,14 @@ class FusionPipeline:
             latest = max(seq, key=lambda m: m.timestamp)
             return [latest]
 
-        return _filter(wifi), _filter(vision), _filter(mmwave), reference_time
+        return _filter(wifi), _filter(vision), _filter(mmwave), _filter(ble), reference_time
 
     def _collect_sources(
         self,
         wifi: Sequence,
         vision: Sequence,
         mmwave: Sequence[MmWaveMeasurement],
+        ble: Sequence[BLEMeasurement],
     ) -> List[str]:
         sources: List[str] = []
         seen = set()
@@ -143,6 +160,12 @@ class FusionPipeline:
                 seen.add(source)
         for measurement in mmwave:
             source = f"mmwave:{measurement.sensor_id}"
+            if source not in seen:
+                sources.append(source)
+                seen.add(source)
+        for measurement in ble:
+            identifier = measurement.device_id or measurement.hashed_identifier or "unknown"
+            source = f"ble:{identifier}"
             if source not in seen:
                 sources.append(source)
                 seen.add(source)
@@ -798,4 +821,6 @@ class FusionPipeline:
             reference_time = max(
                 reference_time, max(m.timestamp for m in measurements.mmwave)
             )
+        if measurements.ble:
+            reference_time = max(reference_time, max(m.timestamp for m in measurements.ble))
         return reference_time or time.time()

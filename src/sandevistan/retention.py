@@ -46,11 +46,13 @@ class RetentionScheduler:
         deleted_measurements = 0
         deleted_logs = 0
         if self.buffer and self.retention_config.measurement_ttl_seconds:
-            wifi_deleted, vision_deleted, mmwave_deleted = self.buffer.prune_history(
+            wifi_deleted, vision_deleted, mmwave_deleted, ble_deleted = self.buffer.prune_history(
                 ttl_seconds=self.retention_config.measurement_ttl_seconds,
                 reference_time=reference_time,
             )
-            deleted_measurements = wifi_deleted + vision_deleted + mmwave_deleted
+            deleted_measurements = (
+                wifi_deleted + vision_deleted + mmwave_deleted + ble_deleted
+            )
         if self.audit_logger and self.retention_config.log_ttl_seconds:
             sensor_deleted, track_deleted = self.audit_logger.prune_logs(
                 ttl_seconds=self.retention_config.log_ttl_seconds,
