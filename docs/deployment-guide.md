@@ -6,6 +6,22 @@
 - Local storage for short-lived logs and metrics (in-memory by default; optional TTL-based retention).
 - Time synchronization across sensor hosts (NTP or equivalent) to keep timestamps aligned.
 
+## Wi-Fi telemetry sources
+Supported ingestion methods today focus on **HTTP JSON exporters** that run on or near the target
+AP/router. Typical deployments use:
+
+- **OpenWRT/hostapd exporters** that expose RSSI/CSI telemetry over an HTTP endpoint.
+- **Monitor mode sniffers** that forward parsed RSSI/CSI frames to a local HTTP exporter service.
+
+If you need pcap parsing or vendor SDK integrations, wrap them behind the same HTTP exporter schema
+so the adapter can ingest without changes.
+
+### Required permissions
+- **Router/AP access**: read permission (or telemetry API token) to pull RSSI/CSI metrics.
+- **Network access**: the fusion host must reach exporter endpoints over the local network.
+- **Monitor mode capture (optional)**: sniffers require elevated privileges/root on the capture
+  host to enable monitor mode and read frames.
+
 ## Environment variables
 This prototype does not hardcode environment variables, but deployments typically use the following to
 standardize runtime behavior. Treat these as **recommended conventions** to keep environments

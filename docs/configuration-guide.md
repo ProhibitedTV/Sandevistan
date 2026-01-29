@@ -43,6 +43,52 @@ Use `SensorConfig` to map sensors to fixed coordinates:
 - If you maintain 3D camera extrinsics, project down to the 2D plane using the floor height as the
   reference `z=0` plane.
 
+## Wi-Fi ingestion adapters
+Sandevistan ships with an HTTP exporter adapter that can pull RSSI/CSI telemetry from routers or
+APs that expose a JSON endpoint. Register each AP in `SensorConfig` and then configure the adapter
+with the endpoint URL and the matching access point ID.
+
+### HTTP exporter example
+```python
+from sandevistan.config import SensorConfig
+from sandevistan.ingestion import HTTPWiFiExporterAdapter, HTTPWiFiExporterConfig
+
+sensor_config = SensorConfig(
+    wifi_access_points={
+        "ap-lobby-01": (2.5, 1.0),
+        "ap-lab-02": (8.0, 3.5),
+    },
+    cameras={},
+)
+
+adapter = HTTPWiFiExporterAdapter(
+    HTTPWiFiExporterConfig(
+        endpoint_url="http://10.0.0.5:8080/wifi/telemetry",
+        access_point_id="ap-lobby-01",
+        timeout_seconds=2.0,
+        default_metadata={"hardware": "OpenWRT exporter", "room": "lobby"},
+    ),
+    sensor_config,
+)
+
+wifi_measurements = adapter.fetch()
+```
+
+Expected exporter payload (list of JSON objects):
+```json
+[
+  {
+    "timestamp": 1702577012.431,
+    "rssi": -42.1,
+    "csi": [0.12, -0.08, 0.07],
+    "metadata": {"channel": 36, "band": "5ghz"}
+  }
+]
+```
+Notes:
+- `access_point_id` can be omitted when the adapter is configured with it.
+- Use `timestamp_ms` if the exporter reports epoch milliseconds (the adapter converts to seconds).
+
 ## Retention configuration
 Use `RetentionConfig` for in-memory retention policies:
 
