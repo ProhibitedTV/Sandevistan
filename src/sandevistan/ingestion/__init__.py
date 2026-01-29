@@ -1,5 +1,10 @@
-"""Ingestion helpers for Wi-Fi, vision, and mmWave sensor payloads."""
+"""Ingestion helpers for Wi-Fi, vision, mmWave, and BLE sensor payloads."""
 
+from .ble_scanner import (
+    BleakScannerAdapter,
+    BleakScannerAdapterError,
+    BleakScannerConfig,
+)
 from .mmwave import MmWaveIngestionError, parse_mmwave_measurements
 from .mmwave_exporter import (
     HTTPMmWaveExporterAdapter,
@@ -30,6 +35,9 @@ from .wifi_exporter import (
 
 __all__ = [
     "DetectionIngestionError",
+    "BleakScannerAdapter",
+    "BleakScannerAdapterError",
+    "BleakScannerConfig",
     "HTTPMmWaveExporterAdapter",
     "HTTPMmWaveExporterConfig",
     "HTTPWiFiExporterAdapter",
