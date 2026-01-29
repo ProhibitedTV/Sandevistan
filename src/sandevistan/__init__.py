@@ -3,6 +3,7 @@
 from .config import SensorConfig, SpaceConfig
 from .models import Detection, FusionInput, TrackState, WiFiMeasurement
 from .pipeline import FusionPipeline
+from .sync import SyncBatch, SyncStatus, SynchronizationBuffer
 
 __all__ = [
     "SensorConfig",
@@ -12,4 +13,7 @@ __all__ = [
     "TrackState",
     "WiFiMeasurement",
     "FusionPipeline",
+    "SyncBatch",
+    "SyncStatus",
+    "SynchronizationBuffer",
 ]
