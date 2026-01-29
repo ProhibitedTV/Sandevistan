@@ -61,6 +61,31 @@ consistent:
 If you already manage configuration via files or a secret store, map those settings into the
 corresponding runtime configuration objects before starting the pipeline.
 
+## Audit logging and consent enforcement
+Audit logging and consent checks are configured through the CLI JSON config. To enable them, add
+an `audit` block with the options below:
+
+```json
+{
+  "audit": {
+    "enabled": true,
+    "require_consent": true,
+    "consent_records": [
+      {
+        "status": "granted",
+        "participant_id": "demo-user-001"
+      }
+    ]
+  }
+}
+```
+
+- `audit.enabled`: turn on audit logging and retention of provenance/track update events.
+- `audit.require_consent`: when `true`, the pipeline enforces that consent records exist before
+  logging updates; when `false`, audit logs are captured without consent checks.
+- `audit.consent_records`: optional seed data for demo or bootstrap flows. Each entry can include
+  `status` (`granted` or `revoked`), plus optional `participant_id` and `session_id`.
+
 ## Local network constraints
 - **On-prem only**: All processing must stay within a trusted local network. Avoid internet egress for
   raw sensor data.
