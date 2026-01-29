@@ -403,10 +403,13 @@ def _parse_wifi_sources(
                 )
             )
         elif source_type == "local":
+            interface_name = _optional_str(entry_map.get("interface_name"))
+            if not interface_name:
+                raise ValueError("wifi_source.interface_name is required for local capture.")
             adapters.append(
                 LocalWiFiCaptureAdapter(
                     LocalWiFiCaptureConfig(
-                        interface_name=str(entry_map.get("interface_name")),
+                        interface_name=interface_name,
                         access_point_id=str(entry_map.get("access_point_id")),
                         target_bssid=_optional_str(entry_map.get("target_bssid")),
                         target_ssid=_optional_str(entry_map.get("target_ssid")),

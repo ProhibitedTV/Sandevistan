@@ -100,9 +100,12 @@ driver/firmware does not expose CSI, only RSSI will be available.
 Operational constraints:
 - Requires Linux with `iw` and `nl80211` support.
 - Interfaces may need monitor mode or elevated permissions (`cap_net_admin`) depending on the
-  adapter/driver.
+  adapter/driver; NetworkManager or wpa_supplicant may need to release the interface for scans.
 - CSI collection often requires patched firmware/drivers and is vendor-specific; verify support
-  before deployment.
+  before deployment. Commonly supported chipsets include Intel 5300 (CSI Tool), Atheros 9k CSI,
+  and Broadcom BCM43xx/Nexmon-derived stacks.
+- Many commodity NICs (especially newer 802.11ax adapters) do **not** expose CSI or disable
+  per-subcarrier data in their firmware; plan for hardware validation early.
 
 ## Data retention defaults
 - Retention is **disabled by default** and must be explicitly enabled.

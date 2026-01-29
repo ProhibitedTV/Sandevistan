@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Local Wi-Fi capture via iw/nl80211 scans with optional CSI collection."""
+
 from dataclasses import dataclass, field
 import json
 import subprocess
