@@ -60,6 +60,19 @@ def _make_wifi(timestamp: float, access_point_id: str, rssi: float) -> WiFiMeasu
     )
 
 
+def _closest_track_id(tracks, position: tuple[float, float]) -> str:
+    return min(
+        tracks,
+        key=lambda track: math.hypot(
+            track.position[0] - position[0], track.position[1] - position[1]
+        ),
+    ).track_id
+
+
+def _to_space(position: tuple[float, float]) -> tuple[float, float]:
+    return (position[0] * 10.0, position[1] * 10.0)
+
+
 def test_fuse_empty_input_returns_empty_list() -> None:
     pipeline = _make_pipeline()
 
@@ -104,3 +117,85 @@ def test_track_position_updates_smoothly() -> None:
         for idx in range(len(positions) - 1)
     ]
     assert all(distance < 1.0 for distance in distances)
+
+
+def test_multi_target_overlap_keeps_consistent_ids() -> None:
+    pipeline = _make_pipeline()
+    timestamps = [0.0, 0.2, 0.4, 0.6]
+    target_a = [(0.3, 0.3), (0.4, 0.4), (0.48, 0.52), (0.4, 0.4)]
+    target_b = [(0.7, 0.7), (0.6, 0.6), (0.52, 0.48), (0.6, 0.6)]
+
+    initial_tracks = pipeline.fuse(
+        FusionInput(
+            wifi=[],
+            vision=[
+                _make_detection(timestamps[0], target_a[0]),
+                _make_detection(timestamps[0], target_b[0]),
+            ],
+        )
+    )
+    assert len(initial_tracks) == 2
+    target_a_id = _closest_track_id(initial_tracks, _to_space(target_a[0]))
+    target_b_id = _closest_track_id(initial_tracks, _to_space(target_b[0]))
+    assert target_a_id != target_b_id
+
+    for idx in range(1, len(timestamps)):
+        detections = [
+            _make_detection(timestamps[idx], target_a[idx]),
+            _make_detection(timestamps[idx], target_b[idx]),
+        ]
+        tracks = pipeline.fuse(FusionInput(wifi=[], vision=detections))
+        assert len(tracks) == 2
+        assert _closest_track_id(tracks, _to_space(target_a[idx])) == target_a_id
+        assert _closest_track_id(tracks, _to_space(target_b[idx])) == target_b_id
+
+
+def test_track_persists_through_occlusion() -> None:
+    pipeline = _make_pipeline()
+    timestamps = [0.0, 0.2, 0.4, 0.6]
+    target_a = [(0.2, 0.2), (0.25, 0.25), (0.3, 0.3), (0.35, 0.35)]
+    target_b = [(0.8, 0.2), (0.75, 0.25), (0.7, 0.3), (0.65, 0.35)]
+
+    initial_tracks = pipeline.fuse(
+        FusionInput(
+            wifi=[],
+            vision=[
+                _make_detection(timestamps[0], target_a[0]),
+                _make_detection(timestamps[0], target_b[0]),
+            ],
+        )
+    )
+    assert len(initial_tracks) == 2
+    target_b_id = _closest_track_id(initial_tracks, _to_space(target_b[0]))
+
+    tracks = pipeline.fuse(
+        FusionInput(
+            wifi=[],
+            vision=[
+                _make_detection(timestamps[1], target_a[1]),
+                _make_detection(timestamps[1], target_b[1]),
+            ],
+        )
+    )
+    assert len(tracks) == 2
+
+    occluded = pipeline.fuse(
+        FusionInput(
+            wifi=[],
+            vision=[_make_detection(timestamps[2], target_a[2])],
+        )
+    )
+    assert len(occluded) == 2
+    assert target_b_id in {track.track_id for track in occluded}
+
+    reappeared = pipeline.fuse(
+        FusionInput(
+            wifi=[],
+            vision=[
+                _make_detection(timestamps[3], target_a[3]),
+                _make_detection(timestamps[3], target_b[3]),
+            ],
+        )
+    )
+    assert len(reappeared) == 2
+    assert _closest_track_id(reappeared, _to_space(target_b[3])) == target_b_id
