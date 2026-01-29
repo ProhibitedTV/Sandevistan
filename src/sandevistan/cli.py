@@ -189,6 +189,16 @@ def _optional_str(value: object) -> Optional[str]:
     return None
 
 
+def _require_non_empty(value: object, label: str) -> str:
+    if value is None:
+        raise ValueError(f"{label} is required.")
+    if isinstance(value, str):
+        if not value.strip():
+            raise ValueError(f"{label} is required.")
+        return value
+    return str(value)
+
+
 def _optional_command(value: object, label: str) -> Optional[Sequence[str]]:
     if value is None:
         return None
@@ -359,11 +369,19 @@ def _parse_wifi_sources(
         entry_map = _require_mapping(entry, f"ingestion.wifi_sources[{idx}]")
         source_type = str(entry_map.get("type", "http")).lower()
         if source_type == "http":
+            endpoint_url = _require_non_empty(
+                entry_map.get("endpoint_url"),
+                f"ingestion.wifi_sources[{idx}].endpoint_url",
+            )
+            access_point_id = _require_non_empty(
+                entry_map.get("access_point_id"),
+                f"ingestion.wifi_sources[{idx}].access_point_id",
+            )
             adapters.append(
                 HTTPWiFiExporterAdapter(
                     HTTPWiFiExporterConfig(
-                        endpoint_url=str(entry_map.get("endpoint_url")),
-                        access_point_id=str(entry_map.get("access_point_id")),
+                        endpoint_url=endpoint_url,
+                        access_point_id=access_point_id,
                         timeout_seconds=_require_float(
                             entry_map.get("timeout_seconds", 2.0),
                             "wifi_source.timeout_seconds",
@@ -403,14 +421,19 @@ def _parse_wifi_sources(
                 )
             )
         elif source_type == "local":
-            interface_name = _optional_str(entry_map.get("interface_name"))
-            if not interface_name:
-                raise ValueError("wifi_source.interface_name is required for local capture.")
+            interface_name = _require_non_empty(
+                entry_map.get("interface_name"),
+                f"ingestion.wifi_sources[{idx}].interface_name",
+            )
+            access_point_id = _require_non_empty(
+                entry_map.get("access_point_id"),
+                f"ingestion.wifi_sources[{idx}].access_point_id",
+            )
             adapters.append(
                 LocalWiFiCaptureAdapter(
                     LocalWiFiCaptureConfig(
                         interface_name=interface_name,
-                        access_point_id=str(entry_map.get("access_point_id")),
+                        access_point_id=access_point_id,
                         target_bssid=_optional_str(entry_map.get("target_bssid")),
                         target_ssid=_optional_str(entry_map.get("target_ssid")),
                         scan_timeout_seconds=_require_float(
@@ -462,10 +485,14 @@ def _parse_vision_sources(
         entry_map = _require_mapping(entry, f"ingestion.vision_sources[{idx}]")
         source_type = str(entry_map.get("type", "http"))
         if source_type == "http":
+            endpoint_url = _require_non_empty(
+                entry_map.get("endpoint_url"),
+                f"ingestion.vision_sources[{idx}].endpoint_url",
+            )
             adapters.append(
                 HTTPVisionExporterAdapter(
                     HTTPVisionExporterConfig(
-                        endpoint_url=str(entry_map.get("endpoint_url")),
+                        endpoint_url=endpoint_url,
                         timeout_seconds=_require_float(
                             entry_map.get("timeout_seconds", 2.0),
                             "vision_source.timeout_seconds",
@@ -561,10 +588,14 @@ def _parse_mmwave_sources(payload: Sequence[object]) -> Optional[_MultiMmWaveSou
         entry_map = _require_mapping(entry, f"ingestion.mmwave_sources[{idx}]")
         source_type = str(entry_map.get("type", "http"))
         if source_type == "http":
+            endpoint_url = _require_non_empty(
+                entry_map.get("endpoint_url"),
+                f"ingestion.mmwave_sources[{idx}].endpoint_url",
+            )
             adapters.append(
                 HTTPMmWaveExporterAdapter(
                     HTTPMmWaveExporterConfig(
-                        endpoint_url=str(entry_map.get("endpoint_url")),
+                        endpoint_url=endpoint_url,
                         default_sensor_id=entry_map.get("default_sensor_id"),
                         timeout_seconds=_require_float(
                             entry_map.get("timeout_seconds", 2.0),
@@ -606,10 +637,14 @@ def _parse_mmwave_sources(payload: Sequence[object]) -> Optional[_MultiMmWaveSou
                 )
             )
         elif source_type == "serial":
+            port = _require_non_empty(
+                entry_map.get("port"),
+                f"ingestion.mmwave_sources[{idx}].port",
+            )
             adapters.append(
                 SerialMmWaveAdapter(
                     SerialMmWaveConfig(
-                        port=str(entry_map.get("port")),
+                        port=port,
                         baudrate=int(entry_map.get("baudrate", 115200)),
                         timeout_seconds=_require_float(
                             entry_map.get("timeout_seconds", 0.5),
