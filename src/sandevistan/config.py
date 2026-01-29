@@ -30,9 +30,19 @@ class AccessPointCalibration:
 
 
 @dataclass(frozen=True)
+class MmWaveCalibration:
+    position: Tuple[float, float]
+    rotation_radians: float = 0.0
+    range_bias_meters: float = 0.0
+    angle_bias_radians: float = 0.0
+    position_uncertainty_meters: float = 1.0
+
+
+@dataclass(frozen=True)
 class SensorConfig:
     wifi_access_points: Dict[str, AccessPointCalibration]
     cameras: Dict[str, CameraCalibration]
+    mmwave_sensors: Dict[str, MmWaveCalibration]
 
 
 @dataclass(frozen=True)

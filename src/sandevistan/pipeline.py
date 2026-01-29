@@ -7,7 +7,7 @@ import time
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .audit import AuditLogger
-from .config import SensorConfig, SpaceConfig
+from .config import MmWaveCalibration, SensorConfig, SpaceConfig
 from .models import BLEMeasurement, FusionInput, MmWaveMeasurement, TrackState, WiFiMeasurement
 from .retention import RetentionScheduler
 
@@ -80,7 +80,9 @@ class FusionPipeline:
             synced_mmwave,
             synced_ble,
         )
-        candidates = self._build_candidates(synced_wifi, synced_vision, reference_time)
+        candidates = self._build_candidates(
+            synced_wifi, synced_vision, synced_mmwave, reference_time
+        )
         assignments, unassigned_tracks, unassigned_candidates = self._associate_tracks(
             candidates, reference_time
         )
@@ -181,35 +183,35 @@ class FusionPipeline:
         self,
         wifi: Sequence,
         vision: Sequence,
+        mmwave: Sequence[MmWaveMeasurement],
         reference_time: float,
     ) -> List[_MeasurementCandidate]:
         wifi_position, wifi_confidence = self._estimate_wifi_position(wifi)
         wifi_uncertainty = (
             (1.5, 1.5) if wifi_position else (2.5, 2.5)
         )
+        mmwave_position, mmwave_confidence, mmwave_uncertainty = self._estimate_mmwave_position(
+            mmwave
+        )
         candidates: List[_MeasurementCandidate] = []
 
         if vision:
             for detection in vision:
                 vision_position = self._estimate_vision_position(detection)
+                measurement_bundle = [
+                    (vision_position, (0.8, 0.8), detection.confidence)
+                ]
                 if wifi_position:
-                    fused_position = self._blend_positions(
-                        vision_position,
-                        wifi_position,
-                        detection.confidence,
-                        wifi_confidence,
+                    measurement_bundle.append(
+                        (wifi_position, wifi_uncertainty, wifi_confidence)
                     )
-                    fused_confidence = min(1.0, 0.5 * detection.confidence + 0.5 * wifi_confidence)
-                    uncertainty = self._blend_uncertainty(
-                        (0.8, 0.8),
-                        wifi_uncertainty,
-                        detection.confidence,
-                        wifi_confidence,
+                if mmwave_position:
+                    measurement_bundle.append(
+                        (mmwave_position, mmwave_uncertainty, mmwave_confidence)
                     )
-                else:
-                    fused_position = vision_position
-                    fused_confidence = detection.confidence
-                    uncertainty = (0.8, 0.8)
+                fused_position, uncertainty, fused_confidence = self._blend_measurements(
+                    measurement_bundle
+                )
                 candidates.append(
                     _MeasurementCandidate(
                         timestamp=reference_time,
@@ -218,13 +220,23 @@ class FusionPipeline:
                         confidence=fused_confidence,
                     )
                 )
-        elif wifi_position:
+        elif wifi_position or mmwave_position:
+            measurement_bundle = []
+            if wifi_position:
+                measurement_bundle.append((wifi_position, wifi_uncertainty, wifi_confidence))
+            if mmwave_position:
+                measurement_bundle.append(
+                    (mmwave_position, mmwave_uncertainty, mmwave_confidence)
+                )
+            fused_position, uncertainty, fused_confidence = self._blend_measurements(
+                measurement_bundle
+            )
             candidates.append(
                 _MeasurementCandidate(
                     timestamp=reference_time,
-                    position=wifi_position,
-                    uncertainty=wifi_uncertainty,
-                    confidence=wifi_confidence,
+                    position=fused_position,
+                    uncertainty=uncertainty,
+                    confidence=fused_confidence,
                 )
             )
 
@@ -266,6 +278,53 @@ class FusionPipeline:
             )
         return (center_x, center_y)
 
+    def _estimate_mmwave_position(
+        self,
+        mmwave: Sequence[MmWaveMeasurement],
+    ) -> Tuple[Optional[Tuple[float, float]], float, Tuple[float, float]]:
+        best_position: Optional[Tuple[float, float]] = None
+        best_confidence = 0.0
+        best_uncertainty = (2.0, 2.0)
+
+        for measurement in mmwave:
+            calibration = self.sensor_config.mmwave_sensors.get(measurement.sensor_id)
+            if calibration is None:
+                continue
+            position = self._mmwave_measurement_to_position(measurement, calibration)
+            if position is None:
+                continue
+            uncertainty_scale = 1.0
+            if measurement.range_meters is None or measurement.angle_radians is None:
+                uncertainty_scale = 1.5
+            uncertainty = (
+                calibration.position_uncertainty_meters * uncertainty_scale,
+                calibration.position_uncertainty_meters * uncertainty_scale,
+            )
+            if measurement.confidence >= best_confidence:
+                best_position = position
+                best_confidence = measurement.confidence
+                best_uncertainty = uncertainty
+
+        return best_position, best_confidence, best_uncertainty
+
+    def _mmwave_measurement_to_position(
+        self,
+        measurement: MmWaveMeasurement,
+        calibration: MmWaveCalibration,
+    ) -> Optional[Tuple[float, float]]:
+        if measurement.range_meters is None or measurement.angle_radians is None:
+            return calibration.position
+        adjusted_range = measurement.range_meters + calibration.range_bias_meters
+        adjusted_angle = (
+            measurement.angle_radians
+            + calibration.angle_bias_radians
+            + calibration.rotation_radians
+        )
+        return (
+            calibration.position[0] + adjusted_range * math.cos(adjusted_angle),
+            calibration.position[1] + adjusted_range * math.sin(adjusted_angle),
+        )
+
     def _blend_positions(
         self,
         vision_pos: Tuple[float, float],
@@ -293,6 +352,32 @@ class FusionPipeline:
             (vision_uncertainty[1] * vision_confidence + wifi_uncertainty[1] * wifi_confidence)
             / total,
         )
+
+    def _blend_measurements(
+        self,
+        measurements: Sequence[Tuple[Tuple[float, float], Tuple[float, float], float]],
+    ) -> Tuple[Tuple[float, float], Tuple[float, float], float]:
+        if not measurements:
+            return (0.0, 0.0), (2.5, 2.5), 0.0
+        total_confidence = sum(confidence for _, _, confidence in measurements)
+        total_confidence = max(total_confidence, 1e-3)
+        weighted_x = sum(position[0] * confidence for position, _, confidence in measurements)
+        weighted_y = sum(position[1] * confidence for position, _, confidence in measurements)
+        weighted_uncertainty_x = sum(
+            uncertainty[0] * confidence for _, uncertainty, confidence in measurements
+        )
+        weighted_uncertainty_y = sum(
+            uncertainty[1] * confidence for _, uncertainty, confidence in measurements
+        )
+        position = (weighted_x / total_confidence, weighted_y / total_confidence)
+        uncertainty = (
+            weighted_uncertainty_x / total_confidence,
+            weighted_uncertainty_y / total_confidence,
+        )
+        fused_confidence = min(
+            1.0, sum(confidence for _, _, confidence in measurements) / len(measurements)
+        )
+        return position, uncertainty, fused_confidence
 
     def _associate_tracks(
         self,

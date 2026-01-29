@@ -14,6 +14,7 @@ from .config import (
     CameraCalibration,
     CameraExtrinsics,
     CameraIntrinsics,
+    MmWaveCalibration,
     RetentionConfig,
     SensorConfig,
     SpaceConfig,
@@ -193,8 +194,10 @@ def _parse_space_config(payload: Mapping[str, object]) -> SpaceConfig:
 def _parse_sensor_config(payload: Mapping[str, object]) -> SensorConfig:
     wifi_payload = payload.get("wifi_access_points", {})
     cameras_payload = payload.get("cameras", {})
+    mmwave_payload = payload.get("mmwave_sensors", {})
     wifi_access_points: dict[str, AccessPointCalibration] = {}
     cameras: dict[str, CameraCalibration] = {}
+    mmwave_sensors: dict[str, MmWaveCalibration] = {}
 
     for access_point_id, entry in _require_mapping(
         wifi_payload, "sensors.wifi_access_points"
@@ -262,7 +265,41 @@ def _parse_sensor_config(payload: Mapping[str, object]) -> SensorConfig:
             ),
         )
 
-    return SensorConfig(wifi_access_points=wifi_access_points, cameras=cameras)
+    for sensor_id, entry in _require_mapping(
+        mmwave_payload, "sensors.mmwave_sensors"
+    ).items():
+        entry_map = _require_mapping(entry, f"mmwave_sensors.{sensor_id}")
+        position = _require_sequence(entry_map.get("position"), "mmwave_sensor.position")
+        if len(position) != 2:
+            raise ValueError("mmwave_sensor.position must have 2 values.")
+        mmwave_sensors[str(sensor_id)] = MmWaveCalibration(
+            position=(
+                _require_float(position[0], "mmwave_sensor.position[0]"),
+                _require_float(position[1], "mmwave_sensor.position[1]"),
+            ),
+            rotation_radians=_require_float(
+                entry_map.get("rotation_radians", 0.0),
+                "mmwave_sensor.rotation_radians",
+            ),
+            range_bias_meters=_require_float(
+                entry_map.get("range_bias_meters", 0.0),
+                "mmwave_sensor.range_bias_meters",
+            ),
+            angle_bias_radians=_require_float(
+                entry_map.get("angle_bias_radians", 0.0),
+                "mmwave_sensor.angle_bias_radians",
+            ),
+            position_uncertainty_meters=_require_float(
+                entry_map.get("position_uncertainty_meters", 1.0),
+                "mmwave_sensor.position_uncertainty_meters",
+            ),
+        )
+
+    return SensorConfig(
+        wifi_access_points=wifi_access_points,
+        cameras=cameras,
+        mmwave_sensors=mmwave_sensors,
+    )
 
 
 def _parse_retention_config(payload: Mapping[str, object]) -> RetentionConfig:
