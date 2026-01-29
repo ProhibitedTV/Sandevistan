@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -15,3 +15,19 @@ class SpaceConfig:
     width_meters: float
     height_meters: float
     coordinate_origin: Tuple[float, float] = (0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class RetentionConfig:
+    """Retention policy for in-memory measurements and audit logs.
+
+    Retention is opt-in; set ``enabled=True`` and supply TTL values to activate.
+    """
+
+    enabled: bool = False
+    measurement_ttl_seconds: Optional[float] = None
+    log_ttl_seconds: Optional[float] = None
+    cleanup_interval_seconds: float = 60.0
+
+    def is_enabled(self) -> bool:
+        return self.enabled and bool(self.measurement_ttl_seconds or self.log_ttl_seconds)

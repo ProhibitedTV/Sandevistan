@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .models import Detection, FusionInput, WiFiMeasurement
@@ -81,16 +82,35 @@ class SynchronizationBuffer:
             latest = max(latest, self._vision[-1].timestamp)
         return latest
 
+    def prune_history(
+        self,
+        *,
+        ttl_seconds: float,
+        reference_time: Optional[float] = None,
+    ) -> Tuple[int, int]:
+        if ttl_seconds <= 0:
+            return 0, 0
+        if reference_time is None:
+            latest = self._latest_timestamp()
+            reference_time = latest or time.time()
+        cutoff = reference_time - ttl_seconds
+        wifi_deleted = self._drop_before(self._wifi, cutoff)
+        vision_deleted = self._drop_before(self._vision, cutoff)
+        return wifi_deleted, vision_deleted
+
     def _prune_window(self, items: List) -> None:
         if not items:
             return
         latest_timestamp = items[-1].timestamp
         cutoff = latest_timestamp - self.window_seconds
-        while items and items[0].timestamp < cutoff:
-            items.pop(0)
+        self._drop_before(items, cutoff)
 
     def _drop_stale(self, items: List, reference_time: float) -> int:
         cutoff = reference_time - self.max_latency_seconds
+        return self._drop_before(items, cutoff)
+
+    @staticmethod
+    def _drop_before(items: List, cutoff: float) -> int:
         dropped = 0
         while items and items[0].timestamp < cutoff:
             items.pop(0)
