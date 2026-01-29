@@ -16,6 +16,11 @@ from .vision_exporter import (
     ProcessVisionExporterConfig,
     VisionExporterError,
 )
+from .wifi_capture import (
+    LocalWiFiCaptureAdapter,
+    LocalWiFiCaptureConfig,
+    LocalWiFiCaptureError,
+)
 from .wifi import WiFiIngestionError, parse_wifi_measurements
 from .wifi_exporter import (
     HTTPWiFiExporterAdapter,
@@ -32,6 +37,9 @@ __all__ = [
     "HTTPVisionExporterAdapter",
     "HTTPVisionExporterConfig",
     "IngestionOrchestrator",
+    "LocalWiFiCaptureAdapter",
+    "LocalWiFiCaptureConfig",
+    "LocalWiFiCaptureError",
     "MmWaveExporterError",
     "MmWaveIngestionError",
     "MmWaveSerialError",

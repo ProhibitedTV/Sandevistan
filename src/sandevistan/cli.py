@@ -26,6 +26,8 @@ from .ingestion import (
     HTTPWiFiExporterAdapter,
     HTTPWiFiExporterConfig,
     IngestionOrchestrator,
+    LocalWiFiCaptureAdapter,
+    LocalWiFiCaptureConfig,
     ProcessVisionExporterAdapter,
     ProcessVisionExporterConfig,
     SerialMmWaveAdapter,
@@ -155,6 +157,21 @@ def _optional_float(value: object) -> Optional[float]:
     return _require_float(value, "value")
 
 
+def _optional_str(value: object) -> Optional[str]:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _optional_command(value: object, label: str) -> Optional[Sequence[str]]:
+    if value is None:
+        return None
+    command = _require_sequence(value, label)
+    if not command:
+        raise ValueError(f"{label} must not be empty.")
+    return [str(item) for item in command]
+
+
 def _parse_space_config(payload: Mapping[str, object]) -> SpaceConfig:
     width = _require_float(payload.get("width_meters"), "space.width_meters")
     height = _require_float(payload.get("height_meters"), "space.height_meters")
@@ -279,51 +296,93 @@ def _parse_wifi_sources(
     for idx, entry in enumerate(payload):
         entry_map = _require_mapping(entry, f"ingestion.wifi_sources[{idx}]")
         source_type = str(entry_map.get("type", "http"))
-        if source_type != "http":
-            raise ValueError(f"Unsupported Wi-Fi source type: {source_type}")
-        adapters.append(
-            HTTPWiFiExporterAdapter(
-                HTTPWiFiExporterConfig(
-                    endpoint_url=str(entry_map.get("endpoint_url")),
-                    access_point_id=str(entry_map.get("access_point_id")),
-                    timeout_seconds=_require_float(
-                        entry_map.get("timeout_seconds", 2.0),
-                        "wifi_source.timeout_seconds",
+        if source_type == "http":
+            adapters.append(
+                HTTPWiFiExporterAdapter(
+                    HTTPWiFiExporterConfig(
+                        endpoint_url=str(entry_map.get("endpoint_url")),
+                        access_point_id=str(entry_map.get("access_point_id")),
+                        timeout_seconds=_require_float(
+                            entry_map.get("timeout_seconds", 2.0),
+                            "wifi_source.timeout_seconds",
+                        ),
+                        max_retries=int(entry_map.get("max_retries", 2)),
+                        retry_backoff_seconds=_require_float(
+                            entry_map.get("retry_backoff_seconds", 0.5),
+                            "wifi_source.retry_backoff_seconds",
+                        ),
+                        clock_offset_seconds=_require_float(
+                            entry_map.get("clock_offset_seconds", 0.0),
+                            "wifi_source.clock_offset_seconds",
+                        ),
+                        clock_drift_tolerance_seconds=_require_float(
+                            entry_map.get("clock_drift_tolerance_seconds", 2.0),
+                            "wifi_source.clock_drift_tolerance_seconds",
+                        ),
+                        max_clock_offset_seconds=_require_float(
+                            entry_map.get("max_clock_offset_seconds", 300.0),
+                            "wifi_source.max_clock_offset_seconds",
+                        ),
+                        drift_smoothing=_require_float(
+                            entry_map.get("drift_smoothing", 0.25),
+                            "wifi_source.drift_smoothing",
+                        ),
+                        source_name=str(entry_map.get("source_name", "http_exporter")),
+                        source_metadata=_require_mapping(
+                            entry_map.get("source_metadata", {}),
+                            "wifi_source.source_metadata",
+                        ),
+                        default_metadata=_require_mapping(
+                            entry_map.get("default_metadata", {}),
+                            "wifi_source.default_metadata",
+                        ),
                     ),
-                    max_retries=int(entry_map.get("max_retries", 2)),
-                    retry_backoff_seconds=_require_float(
-                        entry_map.get("retry_backoff_seconds", 0.5),
-                        "wifi_source.retry_backoff_seconds",
-                    ),
-                    clock_offset_seconds=_require_float(
-                        entry_map.get("clock_offset_seconds", 0.0),
-                        "wifi_source.clock_offset_seconds",
-                    ),
-                    clock_drift_tolerance_seconds=_require_float(
-                        entry_map.get("clock_drift_tolerance_seconds", 2.0),
-                        "wifi_source.clock_drift_tolerance_seconds",
-                    ),
-                    max_clock_offset_seconds=_require_float(
-                        entry_map.get("max_clock_offset_seconds", 300.0),
-                        "wifi_source.max_clock_offset_seconds",
-                    ),
-                    drift_smoothing=_require_float(
-                        entry_map.get("drift_smoothing", 0.25),
-                        "wifi_source.drift_smoothing",
-                    ),
-                    source_name=str(entry_map.get("source_name", "http_exporter")),
-                    source_metadata=_require_mapping(
-                        entry_map.get("source_metadata", {}),
-                        "wifi_source.source_metadata",
-                    ),
-                    default_metadata=_require_mapping(
-                        entry_map.get("default_metadata", {}),
-                        "wifi_source.default_metadata",
-                    ),
-                ),
-                sensor_config,
+                    sensor_config,
+                )
             )
-        )
+        elif source_type == "local":
+            adapters.append(
+                LocalWiFiCaptureAdapter(
+                    LocalWiFiCaptureConfig(
+                        interface_name=str(entry_map.get("interface_name")),
+                        access_point_id=str(entry_map.get("access_point_id")),
+                        target_bssid=_optional_str(entry_map.get("target_bssid")),
+                        target_ssid=_optional_str(entry_map.get("target_ssid")),
+                        scan_timeout_seconds=_require_float(
+                            entry_map.get("scan_timeout_seconds", 2.0),
+                            "wifi_source.scan_timeout_seconds",
+                        ),
+                        scan_command=_optional_command(
+                            entry_map.get("scan_command"),
+                            "wifi_source.scan_command",
+                        ),
+                        csi_command=_optional_command(
+                            entry_map.get("csi_command"),
+                            "wifi_source.csi_command",
+                        ),
+                        csi_timeout_seconds=_require_float(
+                            entry_map.get("csi_timeout_seconds", 1.0),
+                            "wifi_source.csi_timeout_seconds",
+                        ),
+                        clock_offset_seconds=_require_float(
+                            entry_map.get("clock_offset_seconds", 0.0),
+                            "wifi_source.clock_offset_seconds",
+                        ),
+                        source_name=str(entry_map.get("source_name", "local_wifi")),
+                        source_metadata=_require_mapping(
+                            entry_map.get("source_metadata", {}),
+                            "wifi_source.source_metadata",
+                        ),
+                        default_metadata=_require_mapping(
+                            entry_map.get("default_metadata", {}),
+                            "wifi_source.default_metadata",
+                        ),
+                    ),
+                    sensor_config,
+                )
+            )
+        else:
+            raise ValueError(f"Unsupported Wi-Fi source type: {source_type}")
     if not adapters:
         return None
     return _MultiWiFiSource(adapters)
