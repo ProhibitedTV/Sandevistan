@@ -9,6 +9,7 @@ authors = [{ name = "Sandevistan Contributors" }]
 
 [project.scripts]
 sandevistan-cli = "sandevistan.cli:main"
+sandevistan-hud = "sandevistan.hud:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
