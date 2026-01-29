@@ -45,6 +45,14 @@ This project targets **indoor localization and tracking** of consenting particip
   positioning generally requires dense receiver placement, frequent advertisements, and
   favorable RF conditions.
 
+## Linux BLE scanner capabilities
+BLE scanning on Linux typically requires raw socket access provided by BlueZ. Ensure the
+scanner process has sufficient permissions (or run as root) to access the Bluetooth
+adapter. The recommended capabilities for a non-root process are:
+
+- `cap_net_raw`: required to open raw Bluetooth sockets.
+- `cap_net_admin`: required by some adapters to configure scan parameters.
+
 ## Data retention defaults
 - Retention is **disabled by default** and must be explicitly enabled.
 - When enabled, configure separate TTLs for measurements and audit logs.
