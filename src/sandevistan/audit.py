@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Iterable, List, Optional, Protocol, Sequence
 
@@ -165,3 +165,25 @@ class AuditLogger:
         if record.status == ConsentStatus.REVOKED:
             raise ConsentError("Consent has been revoked.")
         return record
+
+    def prune_logs(
+        self,
+        *,
+        ttl_seconds: float,
+        now: Optional[datetime] = None,
+    ) -> tuple[int, int]:
+        if ttl_seconds <= 0:
+            return 0, 0
+        now = now or datetime.utcnow()
+        cutoff = now - timedelta(seconds=ttl_seconds)
+        sensor_before = len(self.sensor_provenance)
+        self.sensor_provenance = [
+            record for record in self.sensor_provenance if record.captured_at >= cutoff
+        ]
+        track_before = len(self.track_updates)
+        self.track_updates = [
+            record for record in self.track_updates if record.captured_at >= cutoff
+        ]
+        return sensor_before - len(self.sensor_provenance), track_before - len(
+            self.track_updates
+        )

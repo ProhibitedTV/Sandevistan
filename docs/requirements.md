@@ -24,3 +24,8 @@ This project targets **indoor localization and tracking** of consenting particip
 - All processing must be on-device or within a trusted local network.
 - Data retention must be minimized and configurable.
 - Clear opt-in consent is required for all tracked participants.
+
+## Data retention defaults
+- Retention is **disabled by default** and must be explicitly enabled.
+- When enabled, configure separate TTLs for measurements and audit logs.
+- Scheduled cleanup runs on a configurable interval; defaults to 60 seconds.
