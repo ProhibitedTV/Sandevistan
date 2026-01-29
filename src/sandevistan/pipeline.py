@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 import math
+import time
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .audit import AuditLogger
 from .config import SensorConfig, SpaceConfig
 from .models import FusionInput, TrackState
+from .retention import RetentionScheduler
 
 
 @dataclass
@@ -35,6 +39,8 @@ class _MeasurementCandidate:
 class FusionPipeline:
     sensor_config: SensorConfig
     space_config: SpaceConfig
+    audit_logger: Optional[AuditLogger] = None
+    retention_scheduler: Optional[RetentionScheduler] = None
     _tracks: Dict[str, _TrackMemory] = field(default_factory=dict, init=False, repr=False)
     _next_track_id: int = field(default=1, init=False, repr=False)
     _confirm_hits: int = field(default=2, init=False, repr=False)
@@ -54,6 +60,7 @@ class FusionPipeline:
         synced_wifi, synced_vision, reference_time = self._synchronize(
             measurements.wifi, measurements.vision
         )
+        sources = self._collect_sources(synced_wifi, synced_vision)
         candidates = self._build_candidates(synced_wifi, synced_vision, reference_time)
         assignments, unassigned_tracks, unassigned_candidates = self._associate_tracks(
             candidates, reference_time
@@ -73,6 +80,20 @@ class FusionPipeline:
         for candidate in unassigned_candidates:
             updated = self._initialize_track(candidate)
             updated_tracks.append(self._to_track_state(updated))
+
+        if self.audit_logger and updated_tracks:
+            self.audit_logger.require_consent()
+            for update in updated_tracks:
+                self.audit_logger.log_sensor_provenance(
+                    track_id=update.track_id,
+                    timestamp=update.timestamp,
+                    sources=sources,
+                )
+                self.audit_logger.log_track_update(
+                    track_id=update.track_id,
+                    timestamp=update.timestamp,
+                    sources=sources,
+                )
 
         return updated_tracks
 
@@ -98,6 +119,21 @@ class FusionPipeline:
             return [latest]
 
         return _filter(wifi), _filter(vision), reference_time
+
+    def _collect_sources(self, wifi: Sequence, vision: Sequence) -> List[str]:
+        sources: List[str] = []
+        seen = set()
+        for measurement in wifi:
+            source = f"wifi:{measurement.access_point_id}"
+            if source not in seen:
+                sources.append(source)
+                seen.add(source)
+        for detection in vision:
+            source = f"vision:{detection.camera_id}"
+            if source not in seen:
+                sources.append(source)
+                seen.add(source)
+        return sources
 
     def _build_candidates(
         self,
@@ -730,4 +766,19 @@ class FusionPipeline:
 
     def stream(self, inputs: Iterable[FusionInput]) -> Iterable[List[TrackState]]:
         for measurement in inputs:
-            yield self.fuse(measurement)
+            updates = self.fuse(measurement)
+            if self.retention_scheduler:
+                reference_time = self._reference_time_from_input(measurement)
+                self.retention_scheduler.run_once(
+                    reference_time=reference_time,
+                    now=datetime.utcnow(),
+                )
+            yield updates
+
+    def _reference_time_from_input(self, measurements: FusionInput) -> float:
+        reference_time = 0.0
+        if measurements.wifi:
+            reference_time = max(reference_time, max(m.timestamp for m in measurements.wifi))
+        if measurements.vision:
+            reference_time = max(reference_time, max(m.timestamp for m in measurements.vision))
+        return reference_time or time.time()
