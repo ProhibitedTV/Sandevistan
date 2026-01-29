@@ -23,12 +23,17 @@
    - Maintains identity over time (track association).
    - Emits track updates to downstream consumers.
 
-## Data flow (MVP)
+## Data flow (wearable-centric MVP)
 ```
-Wi-Fi measurements   ->  Wi-Fi Ingestion  ->
-                                             -> Sync -> Fusion -> Tracker -> Outputs
-Camera detections    -> Vision Ingestion ->
-mmWave events        -> mmWave Ingestion ->
+Pi-local sensors                         Optional router / LAN
+-----------------                        ----------------------
+Wi-Fi RSSI/CSI  -> Wi-Fi Ingestion  ->          |
+Camera frames   -> Vision Ingestion ->          |
+mmWave events   -> mmWave Ingestion ->          |
+BLE adverts     -> BLE Ingestion    ->          |
+                                      -> Sync -> Fusion -> Tracker -> Outputs
+                                               |
+                                          (buffered export)
 ```
 
 ## Interfaces
