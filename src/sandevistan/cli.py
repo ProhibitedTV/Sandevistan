@@ -28,6 +28,8 @@ from .ingestion import (
     IngestionOrchestrator,
     ProcessVisionExporterAdapter,
     ProcessVisionExporterConfig,
+    SerialMmWaveAdapter,
+    SerialMmWaveConfig,
 )
 from .models import BLEMeasurement, Detection, MmWaveMeasurement, TrackState, WiFiMeasurement
 from .ingestion.ble import BLEAdvertisementScanner
@@ -434,50 +436,81 @@ def _parse_mmwave_sources(payload: Sequence[object]) -> Optional[_MultiMmWaveSou
     for idx, entry in enumerate(payload):
         entry_map = _require_mapping(entry, f"ingestion.mmwave_sources[{idx}]")
         source_type = str(entry_map.get("type", "http"))
-        if source_type != "http":
-            raise ValueError(f"Unsupported mmWave source type: {source_type}")
-        adapters.append(
-            HTTPMmWaveExporterAdapter(
-                HTTPMmWaveExporterConfig(
-                    endpoint_url=str(entry_map.get("endpoint_url")),
-                    default_sensor_id=entry_map.get("default_sensor_id"),
-                    timeout_seconds=_require_float(
-                        entry_map.get("timeout_seconds", 2.0),
-                        "mmwave_source.timeout_seconds",
-                    ),
-                    max_retries=int(entry_map.get("max_retries", 2)),
-                    retry_backoff_seconds=_require_float(
-                        entry_map.get("retry_backoff_seconds", 0.5),
-                        "mmwave_source.retry_backoff_seconds",
-                    ),
-                    clock_offset_seconds=_require_float(
-                        entry_map.get("clock_offset_seconds", 0.0),
-                        "mmwave_source.clock_offset_seconds",
-                    ),
-                    clock_drift_tolerance_seconds=_require_float(
-                        entry_map.get("clock_drift_tolerance_seconds", 2.0),
-                        "mmwave_source.clock_drift_tolerance_seconds",
-                    ),
-                    max_clock_offset_seconds=_require_float(
-                        entry_map.get("max_clock_offset_seconds", 300.0),
-                        "mmwave_source.max_clock_offset_seconds",
-                    ),
-                    drift_smoothing=_require_float(
-                        entry_map.get("drift_smoothing", 0.25),
-                        "mmwave_source.drift_smoothing",
-                    ),
-                    source_name=str(entry_map.get("source_name", "http_mmwave_exporter")),
-                    source_metadata=_require_mapping(
-                        entry_map.get("source_metadata", {}),
-                        "mmwave_source.source_metadata",
-                    ),
-                    default_metadata=_require_mapping(
-                        entry_map.get("default_metadata", {}),
-                        "mmwave_source.default_metadata",
-                    ),
+        if source_type == "http":
+            adapters.append(
+                HTTPMmWaveExporterAdapter(
+                    HTTPMmWaveExporterConfig(
+                        endpoint_url=str(entry_map.get("endpoint_url")),
+                        default_sensor_id=entry_map.get("default_sensor_id"),
+                        timeout_seconds=_require_float(
+                            entry_map.get("timeout_seconds", 2.0),
+                            "mmwave_source.timeout_seconds",
+                        ),
+                        max_retries=int(entry_map.get("max_retries", 2)),
+                        retry_backoff_seconds=_require_float(
+                            entry_map.get("retry_backoff_seconds", 0.5),
+                            "mmwave_source.retry_backoff_seconds",
+                        ),
+                        clock_offset_seconds=_require_float(
+                            entry_map.get("clock_offset_seconds", 0.0),
+                            "mmwave_source.clock_offset_seconds",
+                        ),
+                        clock_drift_tolerance_seconds=_require_float(
+                            entry_map.get("clock_drift_tolerance_seconds", 2.0),
+                            "mmwave_source.clock_drift_tolerance_seconds",
+                        ),
+                        max_clock_offset_seconds=_require_float(
+                            entry_map.get("max_clock_offset_seconds", 300.0),
+                            "mmwave_source.max_clock_offset_seconds",
+                        ),
+                        drift_smoothing=_require_float(
+                            entry_map.get("drift_smoothing", 0.25),
+                            "mmwave_source.drift_smoothing",
+                        ),
+                        source_name=str(
+                            entry_map.get("source_name", "http_mmwave_exporter")
+                        ),
+                        source_metadata=_require_mapping(
+                            entry_map.get("source_metadata", {}),
+                            "mmwave_source.source_metadata",
+                        ),
+                        default_metadata=_require_mapping(
+                            entry_map.get("default_metadata", {}),
+                            "mmwave_source.default_metadata",
+                        ),
+                    )
                 )
             )
-        )
+        elif source_type == "serial":
+            adapters.append(
+                SerialMmWaveAdapter(
+                    SerialMmWaveConfig(
+                        port=str(entry_map.get("port")),
+                        baudrate=int(entry_map.get("baudrate", 115200)),
+                        timeout_seconds=_require_float(
+                            entry_map.get("timeout_seconds", 0.5),
+                            "mmwave_source.timeout_seconds",
+                        ),
+                        max_lines=int(entry_map.get("max_lines", 50)),
+                        default_sensor_id=entry_map.get("default_sensor_id"),
+                        clock_offset_seconds=_require_float(
+                            entry_map.get("clock_offset_seconds", 0.0),
+                            "mmwave_source.clock_offset_seconds",
+                        ),
+                        source_name=str(entry_map.get("source_name", "serial_mmwave")),
+                        source_metadata=_require_mapping(
+                            entry_map.get("source_metadata", {}),
+                            "mmwave_source.source_metadata",
+                        ),
+                        default_metadata=_require_mapping(
+                            entry_map.get("default_metadata", {}),
+                            "mmwave_source.default_metadata",
+                        ),
+                    )
+                )
+            )
+        else:
+            raise ValueError(f"Unsupported mmWave source type: {source_type}")
     if not adapters:
         return None
     return _MultiMmWaveSource(adapters)

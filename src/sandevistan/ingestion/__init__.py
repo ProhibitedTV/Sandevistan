@@ -6,6 +6,7 @@ from .mmwave_exporter import (
     HTTPMmWaveExporterConfig,
     MmWaveExporterError,
 )
+from .mmwave_serial import MmWaveSerialError, SerialMmWaveAdapter, SerialMmWaveConfig
 from .orchestrator import IngestionOrchestrator, MmWaveSource, VisionSource, WiFiSource
 from .vision import DetectionIngestionError, parse_detections
 from .vision_exporter import (
@@ -33,7 +34,10 @@ __all__ = [
     "IngestionOrchestrator",
     "MmWaveExporterError",
     "MmWaveIngestionError",
+    "MmWaveSerialError",
     "MmWaveSource",
+    "SerialMmWaveAdapter",
+    "SerialMmWaveConfig",
     "ProcessVisionExporterAdapter",
     "ProcessVisionExporterConfig",
     "WiFiExporterError",
