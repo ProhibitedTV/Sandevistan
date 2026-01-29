@@ -16,6 +16,14 @@ This repository contains an early-stage prototype framework inspired by the *San
 - mmWave sensors provide short-range, coarse presence/motion cues that can be affected by multipath and occlusions.
 - All RF-based measurements are probabilistic and should be treated as corroborating evidence, not guarantees.
 
+## Wearable constraints
+- Wearable deployments (e.g., backpack-mounted Raspberry Pi) must operate with intermittent or no Wi-Fi
+  connectivity; local fusion should continue even when upstream links are unavailable.
+- Real-world Wi-Fi motion detection is sensitive to body blockage, antenna orientation, and access point
+  geometry; expect higher false positives/negatives in crowded or reflective environments.
+- mmWave presence detection can miss slow or stationary subjects and may over-report motion in tight
+  corridors where multipath dominates; treat motion flags as coarse cues rather than precise tracking.
+
 ## Repository layout
 - `docs/requirements.md`: Product requirements and performance targets.
 - `docs/architecture.md`: System architecture and data flow.

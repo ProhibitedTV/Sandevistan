@@ -31,6 +31,10 @@ This project targets **indoor localization and tracking** of consenting particip
 - All processing must be on-device or within a trusted local network.
 - Data retention must be minimized and configurable.
 - Clear opt-in consent is required for all tracked participants.
+- Wearable operation must tolerate intermittent connectivity and power cycling; the system
+  should resume local capture and fusion without relying on cloud services.
+- Offline mode must preserve essential tracking behavior (local fusion + output buffering) and
+  degrade gracefully when upstream network links or routers are unavailable.
 - Wi-Fi-based motion detection is opportunistic and highly environment-dependent; expect degraded
   performance in crowded RF environments, when access point geometry is poor, or when CSI/RSSI
   sampling rates are low.
@@ -47,6 +51,22 @@ This project targets **indoor localization and tracking** of consenting particip
 - BLE emitter location is only approximate; room-scale proximity is typical, and precise
   positioning generally requires dense receiver placement, frequent advertisements, and
   favorable RF conditions.
+
+## Wearable operation requirements
+- The default deployment target is a wearable or backpack-mounted Raspberry Pi class device.
+- The device must support local ingestion and fusion even when no external router is present.
+- On-device storage must bound buffering (e.g., fixed-size ring buffer) to avoid exhausting
+  flash storage during long offline sessions.
+- Power constraints require configurable sampling rates and the ability to disable sensors
+  dynamically when battery is low or the device is stationary.
+
+## Sensor fusion constraints
+- Synchronization windows must accommodate clock drift between local sensors and any optional
+  upstream router timestamps; drift correction should be bounded and observable.
+- Fusion should prefer co-located sensors (Pi-local) when external links introduce latency or
+  dropouts.
+- When only one modality is available (e.g., Wi-Fi without vision), fusion must emit lower
+  confidence tracks and annotate missing modalities in provenance metadata.
 
 ## Linux BLE scanner capabilities
 BLE scanning on Linux typically requires raw socket access provided by BlueZ. Ensure the
