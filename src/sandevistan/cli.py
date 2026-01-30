@@ -1033,9 +1033,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 time.sleep(poll_interval)
                 iterations += 1
             else:
-                updates = pipeline.fuse_aligned(
+                updates = pipeline.fuse(
                     batch.fusion_input,
-                    batch.status.reference_time,
+                    aligned=True,
+                    reference_time=batch.status.reference_time,
                 )
                 if args.emit_legacy_tracks:
                     if updates:
