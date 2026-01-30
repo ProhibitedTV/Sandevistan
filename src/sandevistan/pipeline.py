@@ -7,7 +7,7 @@ import time
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .audit import AuditLogger
-from .config import MmWaveCalibration, SensorConfig, SpaceConfig
+from .config import CameraCalibration, MmWaveCalibration, SensorConfig, SpaceConfig
 from .models import BLEMeasurement, FusionInput, MmWaveMeasurement, TrackState, WiFiMeasurement
 from .retention import RetentionScheduler
 
@@ -315,9 +315,13 @@ class FusionPipeline:
         x_min, y_min, x_max, y_max = detection.bbox
         center_x = (x_min + x_max) / 2.0
         center_y = (y_min + y_max) / 2.0
-        calibration = self.sensor_config.cameras.get(detection.camera_id)
-        if calibration and calibration.homography:
-            projected = self._apply_homography((center_x, y_max), calibration.homography)
+        if detection.camera_id in self.sensor_config.cameras:
+            calibration = self.sensor_config.cameras[detection.camera_id]
+            if calibration.homography:
+                projected = self._apply_homography((center_x, y_max), calibration.homography)
+                if projected is not None:
+                    return projected
+            projected = self._project_ground_plane((center_x, y_max), calibration)
             if projected is not None:
                 return projected
         return self._fallback_bbox_position(center_x, center_y)
@@ -337,6 +341,44 @@ class FusionPipeline:
         x_world = (h00 * x_img + h01 * y_img + h02) / denominator
         y_world = (h10 * x_img + h11 * y_img + h12) / denominator
         return (x_world, y_world)
+
+    def _project_ground_plane(
+        self,
+        point: Tuple[float, float],
+        calibration: CameraCalibration,
+    ) -> Optional[Tuple[float, float]]:
+        if calibration.camera_height_meters is None or calibration.tilt_radians is None:
+            return None
+        fx, fy = calibration.intrinsics.focal_length
+        if abs(fx) < 1e-6 or abs(fy) < 1e-6:
+            return None
+        cx, cy = calibration.intrinsics.principal_point
+        skew = calibration.intrinsics.skew
+        u, v = point
+        x_cam = (u - cx - skew * (v - cy)) / fx
+        y_cam = (v - cy) / fy
+        z_cam = 1.0
+        cos_tilt = math.cos(calibration.tilt_radians)
+        sin_tilt = math.sin(calibration.tilt_radians)
+        x_pitch = x_cam
+        y_pitch = cos_tilt * y_cam - sin_tilt * z_cam
+        z_pitch = sin_tilt * y_cam + cos_tilt * z_cam
+        x_base = x_pitch
+        y_base = z_pitch
+        z_base = -y_pitch
+        yaw = calibration.extrinsics.rotation_radians
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        dx = cos_yaw * x_base - sin_yaw * y_base
+        dy = sin_yaw * x_base + cos_yaw * y_base
+        dz = z_base
+        if dz >= -1e-6:
+            return None
+        scale = -calibration.camera_height_meters / dz
+        if scale <= 0.0:
+            return None
+        cam_x, cam_y = calibration.extrinsics.translation
+        return (cam_x + scale * dx, cam_y + scale * dy)
 
     def _fallback_bbox_position(self, center_x: float, center_y: float) -> Tuple[float, float]:
         origin_x, origin_y = self.space_config.coordinate_origin

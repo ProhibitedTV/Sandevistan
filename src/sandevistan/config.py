@@ -22,6 +22,8 @@ class CameraCalibration:
     intrinsics: CameraIntrinsics
     extrinsics: CameraExtrinsics
     homography: Optional[Tuple[Tuple[float, float, float], ...]] = None
+    camera_height_meters: Optional[float] = None
+    tilt_radians: Optional[float] = None
 
 
 @dataclass(frozen=True)

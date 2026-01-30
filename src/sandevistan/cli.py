@@ -297,6 +297,16 @@ def _parse_sensor_config(payload: Mapping[str, object]) -> SensorConfig:
         )
         if len(focal_length) != 2 or len(principal_point) != 2 or len(translation) != 2:
             raise ValueError("Camera intrinsics/extrinsics must have 2-value tuples.")
+        camera_height_value = entry_map.get("camera_height_meters")
+        tilt_value = entry_map.get("tilt_radians")
+        camera_height_meters = (
+            _require_float(camera_height_value, "camera.camera_height_meters")
+            if camera_height_value is not None
+            else None
+        )
+        tilt_radians = (
+            _require_float(tilt_value, "camera.tilt_radians") if tilt_value is not None else None
+        )
 
         cameras[str(camera_id)] = CameraCalibration(
             intrinsics=CameraIntrinsics(
@@ -323,6 +333,8 @@ def _parse_sensor_config(payload: Mapping[str, object]) -> SensorConfig:
                 ),
             ),
             homography=_parse_homography(entry_map.get("homography"), "camera.homography"),
+            camera_height_meters=camera_height_meters,
+            tilt_radians=tilt_radians,
         )
 
     for sensor_id, entry in _require_mapping(
