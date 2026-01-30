@@ -11,6 +11,9 @@
    - When a camera homography is configured, the fusion pipeline projects the
      detection’s bottom-center image point (bbox center X, bbox max Y) into world
      space using the 3×3 homography matrix.
+   - When homography is missing but camera height + tilt are configured, the
+     pipeline uses a ground-plane projection (pinhole intrinsics + pitch/yaw)
+     to intersect the detection ray with the floor.
 3. **mmWave Ingestion**
    - Accepts presence/motion events from mmWave sensors.
    - Normalizes timestamp, confidence, and optional range/angle metadata.
@@ -67,5 +70,9 @@ The fusion pipeline assigns an `alert_tier` to each track update using recent si
   3×3 array that maps image coordinates to world coordinates on the ground
   plane. For normalized bounding boxes, configure the homography to operate on
   normalized image coordinates (0–1). If the homography is missing or invalid,
-  the system falls back to the normalized-bbox mapping into the `space`
-  dimensions.
+  the system attempts a ground-plane projection using `camera_height_meters`
+  (camera height above the floor), `tilt_radians` (pitch downward from the
+  horizontal), intrinsics, and the camera extrinsics (translation + yaw). The
+  intrinsics must use the same units as the detection bounding boxes
+  (normalized 0–1 or pixel coordinates). If those parameters are missing, the
+  system falls back to the normalized-bbox mapping into the `space` dimensions.
