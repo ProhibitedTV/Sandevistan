@@ -391,12 +391,50 @@ def _draw_text(
     surface.blit(text_surface, position)
 
 
+def _draw_waveform_overlay(
+    pygame_module: object,
+    screen: object,
+    camera_rect: object,
+    samples: Sequence[float],
+    color: Tuple[int, int, int],
+) -> None:
+    if len(samples) < 2:
+        return
+    inset = 12
+    width = max(camera_rect.width - inset * 2, 1)
+    height = max(camera_rect.height - inset * 2, 1)
+    origin_x = camera_rect.x + inset
+    origin_y = camera_rect.y + inset
+    midline = origin_y + height / 2.0
+    amplitude = height / 2.0
+    sample_count = len(samples)
+    x_step = width / (sample_count - 1)
+    points = []
+    for index, sample in enumerate(samples):
+        clamped = max(min(sample, 1.0), -1.0)
+        x = origin_x + index * x_step
+        y = midline - clamped * amplitude
+        points.append((int(round(x)), int(round(y))))
+    if len(points) >= 2:
+        pygame_module.draw.lines(screen, color, False, points, 2)
+
+
+def _waveform_is_fresh(state: HudState, now: float) -> bool:
+    timestamp = state.waveform_timestamp
+    if timestamp is None:
+        timestamp = state.waveform_updated_at
+    if timestamp is None:
+        return False
+    return (now - timestamp) <= state.max_age_seconds
+
+
 def _render_hud(
     pygame_module: object,
     screen: object,
     state: HudState,
     font: object,
     small_font: object,
+    waveform_overlay: bool,
 ) -> None:
     screen_width, screen_height = screen.get_size()
     now = time.time()
@@ -481,6 +519,18 @@ def _render_hud(
         scaled = pygame_module.transform.smoothscale(surface, scaled_size)
         target_rect = scaled.get_rect(center=camera_rect.center)
         screen.blit(scaled, target_rect)
+        if (
+            waveform_overlay
+            and state.waveform is not None
+            and _waveform_is_fresh(state, now)
+        ):
+            _draw_waveform_overlay(
+                pygame_module,
+                screen,
+                camera_rect,
+                state.waveform,
+                (92, 220, 176),
+            )
     else:
         _draw_text(
             pygame_module,
@@ -616,6 +666,7 @@ def render_from_stream(
     fps: int,
     windowed: bool,
     window_size: Tuple[int, int],
+    waveform_overlay: bool,
 ) -> None:
     import pygame
 
@@ -654,7 +705,7 @@ def render_from_stream(
                 break
             state.ingest_update(update, pygame)
 
-        _render_hud(pygame, screen, state, font, small_font)
+        _render_hud(pygame, screen, state, font, small_font, waveform_overlay)
         pygame.display.flip()
         clock.tick(max(fps, 1))
 
@@ -693,6 +744,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=720,
         help="Window height when --windowed is set (default: 720).",
     )
+    parser.add_argument(
+        "--waveform-overlay",
+        action="store_true",
+        help="Overlay waveform samples on the camera feed when available.",
+    )
     args = parser.parse_args(argv)
 
     render_from_stream(
@@ -701,6 +757,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         fps=args.fps,
         windowed=args.windowed,
         window_size=(args.width, args.height),
+        waveform_overlay=args.waveform_overlay,
     )
     return 0
 

@@ -29,6 +29,12 @@ To run in a window instead of full screen:
 sandevistan-hud --windowed --width 1280 --height 720 < stream.ndjson
 ```
 
+To overlay waveform samples on top of the camera feed (when waveform data is present):
+
+```bash
+sandevistan-hud --waveform-overlay < stream.ndjson
+```
+
 ### HUD input fields
 
 Each NDJSON line can include:
@@ -50,6 +56,9 @@ Each NDJSON line can include:
 
 - **Alert tiers**: Colored badges for red/yellow/blue alert counts derived from tracks.
 - **Camera panel**: Most recent camera frame with age indicator in the lower-left corner.
+- **Waveform overlay**: When `--waveform-overlay` is enabled, the most recent waveform
+  samples are rendered as a polyline over the camera panel if the waveform timestamp is
+  within the HUD staleness window.
 - **Sensor status**: Online/offline state plus last-seen age for each sensor.
 - **Device list**: RSSI + age for the most recently seen devices (top 10 by RSSI).
 
