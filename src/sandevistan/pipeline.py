@@ -69,20 +69,55 @@ class FusionPipeline:
             measurements.mmwave,
             measurements.ble,
         )
-        alert_tier = self._classify_alert_tier(
+        return self._fuse_aligned(
             synced_wifi,
             synced_vision,
             synced_mmwave,
             synced_ble,
+            reference_time,
+        )
+
+    def fuse_aligned(self, measurements: FusionInput, reference_time: float) -> List[TrackState]:
+        """
+        Fuse already-aligned measurements using the provided reference time.
+        """
+        if (
+            not measurements.wifi
+            and not measurements.vision
+            and not measurements.mmwave
+            and not measurements.ble
+        ):
+            return []
+        return self._fuse_aligned(
+            measurements.wifi,
+            measurements.vision,
+            measurements.mmwave,
+            measurements.ble,
+            reference_time,
+        )
+
+    def _fuse_aligned(
+        self,
+        wifi: Sequence,
+        vision: Sequence,
+        mmwave: Sequence,
+        ble: Sequence,
+        reference_time: float,
+    ) -> List[TrackState]:
+        alert_tier = self._classify_alert_tier(
+            wifi,
+            vision,
+            mmwave,
+            ble,
         )
         sources = self._collect_sources(
-            synced_wifi,
-            synced_vision,
-            synced_mmwave,
-            synced_ble,
+            wifi,
+            vision,
+            mmwave,
+            ble,
         )
         candidates = self._build_candidates(
-            synced_wifi, synced_vision, synced_mmwave, reference_time
+            wifi, vision, mmwave, reference_time
         )
         assignments, unassigned_tracks, unassigned_candidates = self._associate_tracks(
             candidates, reference_time
