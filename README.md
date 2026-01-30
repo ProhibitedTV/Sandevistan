@@ -26,6 +26,7 @@ This repository contains an early-stage prototype framework inspired by the *San
 
 ## Repository layout
 - `docs/requirements.md`: Product requirements and performance targets.
+- `docs/assembly.md`: Wearable hardware assembly guidance for Raspberry Pi 5 builds.
 - `docs/architecture.md`: System architecture and data flow.
 - `docs/ethics-policy.md`: Ethics and permissible use policy.
 - `docs/display.md`: Live tracker display consumer instructions.
