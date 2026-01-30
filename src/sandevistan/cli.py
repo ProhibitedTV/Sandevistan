@@ -988,7 +988,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 time.sleep(poll_interval)
                 iterations += 1
             else:
-                updates = pipeline.fuse(batch.fusion_input)
+                updates = pipeline.fuse_aligned(
+                    batch.fusion_input,
+                    batch.status.reference_time,
+                )
                 if args.emit_legacy_tracks:
                     if updates:
                         _emit_ndjson(updates)
