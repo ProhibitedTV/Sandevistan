@@ -41,6 +41,10 @@ Each NDJSON line can include:
 - `sensor_health` or `sensors`: List or object describing sensor status entries.
 - `mmwave_status`: Optional object with `status`, `last_seen`, and optional `detail`. This
   is included in the sensor list if provided.
+- `waveform` or `audio_waveform`: List of audio samples (floats, expected range `-1.0` to
+  `1.0`). Non-numeric samples are skipped and values are clamped into range. Typical sample
+  counts are 256-1024 per update. Optional metadata fields include `waveform_timestamp`
+  (seconds) and `waveform_sample_rate` (Hz) for staleness and scaling.
 
 ### HUD UI legend
 
