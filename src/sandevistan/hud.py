@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .models import TrackState
 
@@ -37,6 +37,9 @@ class HudUpdate:
     sensor_health: List[SensorHealthSnapshot] = field(default_factory=list)
     mmwave_status: Optional[SensorHealthSnapshot] = None
     camera_bytes: Optional[bytes] = None
+    waveform: Optional[Sequence[float]] = None
+    waveform_timestamp: Optional[float] = None
+    waveform_sample_rate: Optional[float] = None
 
 
 @dataclass
@@ -48,6 +51,10 @@ class HudState:
     mmwave_status: Optional[SensorHealthSnapshot] = None
     camera_surface: Optional[object] = None
     camera_updated_at: Optional[float] = None
+    waveform: Optional[Sequence[float]] = None
+    waveform_timestamp: Optional[float] = None
+    waveform_sample_rate: Optional[float] = None
+    waveform_updated_at: Optional[float] = None
 
     def ingest_update(self, update: HudUpdate, pygame_module: object) -> None:
         for track in update.tracks:
@@ -63,6 +70,11 @@ class HudState:
             if surface is not None:
                 self.camera_surface = surface
                 self.camera_updated_at = time.time()
+        if update.waveform is not None:
+            self.waveform = update.waveform
+            self.waveform_timestamp = update.waveform_timestamp
+            self.waveform_sample_rate = update.waveform_sample_rate
+            self.waveform_updated_at = time.time()
 
     def prune(self, now: Optional[float] = None) -> None:
         if now is None:
@@ -74,6 +86,14 @@ class HudState:
         ]
         for track_id in stale:
             self.tracks.pop(track_id, None)
+        if (
+            self.waveform_updated_at is not None
+            and now - self.waveform_updated_at > self.max_age_seconds
+        ):
+            self.waveform = None
+            self.waveform_timestamp = None
+            self.waveform_sample_rate = None
+            self.waveform_updated_at = None
 
 
 def _decode_camera_frame(payload: bytes, pygame_module: object) -> Optional[object]:
@@ -220,6 +240,38 @@ def _parse_mmwave_status(payload: dict) -> Optional[SensorHealthSnapshot]:
     return _select_mmwave_status(sensors)
 
 
+def _parse_waveform(payload: dict) -> Tuple[Optional[List[float]], Optional[float], Optional[float]]:
+    raw = payload.get("waveform") or payload.get("audio_waveform")
+    if raw is None:
+        return None, None, None
+    if not isinstance(raw, list):
+        return None, None, None
+    samples: List[float] = []
+    for value in raw:
+        try:
+            sample = float(value)
+        except (TypeError, ValueError):
+            continue
+        if sample < -1.0:
+            sample = -1.0
+        elif sample > 1.0:
+            sample = 1.0
+        samples.append(sample)
+    if not samples:
+        return None, None, None
+    timestamp = _optional_float(
+        payload.get("waveform_timestamp")
+        or payload.get("audio_waveform_timestamp")
+        or payload.get("waveform_time")
+    )
+    sample_rate = _optional_float(
+        payload.get("waveform_sample_rate")
+        or payload.get("audio_sample_rate")
+        or payload.get("sample_rate")
+    )
+    return samples, timestamp, sample_rate
+
+
 def _extract_camera_bytes(payload: dict) -> Optional[bytes]:
     camera_frame = payload.get("camera_frame")
     if isinstance(camera_frame, str):
@@ -264,6 +316,7 @@ def _parse_hud_update(payload: object) -> HudUpdate:
     }:
         sensor_health.append(mmwave_status)
     camera_bytes = _extract_camera_bytes(payload)
+    waveform, waveform_timestamp, waveform_sample_rate = _parse_waveform(payload)
 
     return HudUpdate(
         tracks=tracks,
@@ -271,6 +324,9 @@ def _parse_hud_update(payload: object) -> HudUpdate:
         sensor_health=sensor_health,
         mmwave_status=mmwave_status,
         camera_bytes=camera_bytes,
+        waveform=waveform,
+        waveform_timestamp=waveform_timestamp,
+        waveform_sample_rate=waveform_sample_rate,
     )
 
 
