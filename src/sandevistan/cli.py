@@ -209,6 +209,29 @@ def _optional_command(value: object, label: str) -> Optional[Sequence[str]]:
     return [str(item) for item in command]
 
 
+def _parse_homography(
+    value: object, label: str
+) -> Optional[tuple[tuple[float, float, float], ...]]:
+    if value is None:
+        return None
+    rows = _require_sequence(value, label)
+    if len(rows) != 3:
+        raise ValueError(f"{label} must have 3 rows.")
+    parsed_rows: list[tuple[float, float, float]] = []
+    for row_index, row in enumerate(rows):
+        row_values = _require_sequence(row, f"{label}[{row_index}]")
+        if len(row_values) != 3:
+            raise ValueError(f"{label}[{row_index}] must have 3 values.")
+        parsed_rows.append(
+            (
+                _require_float(row_values[0], f"{label}[{row_index}][0]"),
+                _require_float(row_values[1], f"{label}[{row_index}][1]"),
+                _require_float(row_values[2], f"{label}[{row_index}][2]"),
+            )
+        )
+    return tuple(parsed_rows)
+
+
 def _parse_space_config(payload: Mapping[str, object]) -> SpaceConfig:
     width = _require_float(payload.get("width_meters"), "space.width_meters")
     height = _require_float(payload.get("height_meters"), "space.height_meters")
@@ -299,6 +322,7 @@ def _parse_sensor_config(payload: Mapping[str, object]) -> SensorConfig:
                     "camera.extrinsics.rotation_radians",
                 ),
             ),
+            homography=_parse_homography(entry_map.get("homography"), "camera.homography"),
         )
 
     for sensor_id, entry in _require_mapping(

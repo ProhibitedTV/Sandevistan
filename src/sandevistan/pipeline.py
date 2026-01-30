@@ -272,6 +272,30 @@ class FusionPipeline:
         x_min, y_min, x_max, y_max = detection.bbox
         center_x = (x_min + x_max) / 2.0
         center_y = (y_min + y_max) / 2.0
+        calibration = self.sensor_config.cameras.get(detection.camera_id)
+        if calibration and calibration.homography:
+            projected = self._apply_homography((center_x, y_max), calibration.homography)
+            if projected is not None:
+                return projected
+        return self._fallback_bbox_position(center_x, center_y)
+
+    def _apply_homography(
+        self,
+        point: Tuple[float, float],
+        homography: Tuple[Tuple[float, float, float], ...],
+    ) -> Optional[Tuple[float, float]]:
+        x_img, y_img = point
+        h00, h01, h02 = homography[0]
+        h10, h11, h12 = homography[1]
+        h20, h21, h22 = homography[2]
+        denominator = h20 * x_img + h21 * y_img + h22
+        if abs(denominator) < 1e-6:
+            return None
+        x_world = (h00 * x_img + h01 * y_img + h02) / denominator
+        y_world = (h10 * x_img + h11 * y_img + h12) / denominator
+        return (x_world, y_world)
+
+    def _fallback_bbox_position(self, center_x: float, center_y: float) -> Tuple[float, float]:
         origin_x, origin_y = self.space_config.coordinate_origin
         if 0.0 <= center_x <= 1.0 and 0.0 <= center_y <= 1.0:
             return (
