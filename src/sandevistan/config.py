@@ -21,6 +21,7 @@ class CameraExtrinsics:
 class CameraCalibration:
     intrinsics: CameraIntrinsics
     extrinsics: CameraExtrinsics
+    homography: Optional[Tuple[Tuple[float, float, float], ...]] = None
 
 
 @dataclass(frozen=True)

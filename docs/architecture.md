@@ -8,6 +8,9 @@
 2. **Vision Ingestion**
    - Accepts camera detections (boxes, keypoints) with timestamps.
    - Optionally performs camera-to-world transforms.
+   - When a camera homography is configured, the fusion pipeline projects the
+     detection’s bottom-center image point (bbox center X, bbox max Y) into world
+     space using the 3×3 homography matrix.
 3. **mmWave Ingestion**
    - Accepts presence/motion events from mmWave sensors.
    - Normalizes timestamp, confidence, and optional range/angle metadata.
@@ -58,3 +61,11 @@ The fusion pipeline assigns an `alert_tier` to each track update using recent si
 - Fixed sensor positions with known calibration.
 - Small, controlled test space (single room or corridor).
 - Limited number of participants with consent.
+
+## Camera calibration notes
+- Camera calibration entries may include an optional `homography` matrix: a
+  3×3 array that maps image coordinates to world coordinates on the ground
+  plane. For normalized bounding boxes, configure the homography to operate on
+  normalized image coordinates (0–1). If the homography is missing or invalid,
+  the system falls back to the normalized-bbox mapping into the `space`
+  dimensions.
