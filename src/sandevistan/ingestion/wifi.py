@@ -5,7 +5,7 @@ from typing import Iterable, List, Mapping, Optional, Sequence
 
 from ..calibration import require_access_point_calibration
 from ..config import SensorConfig
-from ..models import WiFiMeasurement
+from ..models import WiFiBand, WiFiMeasurement
 
 
 @dataclass(frozen=True)
@@ -72,14 +72,29 @@ def parse_wifi_measurements(
                     timestamp,
                 )
             )
+        metadata_map = dict(metadata) if isinstance(metadata, Mapping) else None
+
+        channel_raw = raw.get("channel")
+        band_raw = raw.get("band")
+        if metadata_map is not None:
+            if channel_raw is None and "channel" in metadata_map:
+                channel_raw = metadata_map.get("channel")
+            if band_raw is None and "band" in metadata_map:
+                band_raw = metadata_map.get("band")
+        channel = _optional_int(
+            channel_raw, "channel", access_point_id, timestamp, positive_only=True
+        )
+        band = _optional_band(band_raw, access_point_id, timestamp)
 
         measurements.append(
             WiFiMeasurement(
                 timestamp=timestamp,
                 access_point_id=access_point_id,
                 rssi=rssi,
+                channel=channel,
+                band=band,
                 csi=csi,
-                metadata=dict(metadata) if isinstance(metadata, Mapping) else None,
+                metadata=metadata_map,
             )
         )
 
@@ -146,6 +161,71 @@ def _optional_float_sequence(
                 )
             )
     return converted
+
+
+def _optional_int(
+    value: object,
+    field: str,
+    access_point_id: str,
+    timestamp: float,
+    *,
+    positive_only: bool = False,
+) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        converted = int(value)
+    except (TypeError, ValueError):
+        raise WiFiIngestionError(
+            _format_message(
+                f"{field} must be an integer when provided.",
+                access_point_id,
+                timestamp,
+            )
+        )
+    if positive_only and converted <= 0:
+        raise WiFiIngestionError(
+            _format_message(
+                f"{field} must be positive when provided.",
+                access_point_id,
+                timestamp,
+            )
+        )
+    return converted
+
+
+def _optional_band(
+    value: object,
+    access_point_id: str,
+    timestamp: float,
+) -> Optional[WiFiBand]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        value = str(value)
+    if not isinstance(value, str):
+        raise WiFiIngestionError(
+            _format_message(
+                "band must be a string when provided.",
+                access_point_id,
+                timestamp,
+            )
+        )
+    normalized = value.strip().lower().replace(" ", "")
+    normalized = normalized.replace("ghz", "")
+    if normalized in {"2.4", "2.4g"}:
+        return "2.4ghz"
+    if normalized in {"5", "5g"}:
+        return "5ghz"
+    if normalized in {"6", "6g"}:
+        return "6ghz"
+    raise WiFiIngestionError(
+        _format_message(
+            f"band must be one of 2.4ghz, 5ghz, or 6ghz; received {value!r}.",
+            access_point_id,
+            timestamp,
+        )
+    )
 
 
 def _format_message(message: str, access_point_id: object, timestamp: object) -> str:

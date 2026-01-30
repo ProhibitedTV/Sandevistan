@@ -4,12 +4,16 @@ from dataclasses import dataclass
 import math
 from typing import Literal, Optional, Sequence, Tuple
 
+WiFiBand = Literal["2.4ghz", "5ghz", "6ghz"]
+
 
 @dataclass(frozen=True)
 class WiFiMeasurement:
     timestamp: float
     access_point_id: str
     rssi: float
+    channel: Optional[int] = None
+    band: Optional[WiFiBand] = None
     csi: Optional[Sequence[float]] = None
     metadata: Optional[dict] = None
 

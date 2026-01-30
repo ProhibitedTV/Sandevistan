@@ -313,10 +313,14 @@ class SynchronizationBuffer:
         ratio = (reference_time - before.timestamp) / (after.timestamp - before.timestamp)
         rssi = self._lerp(before.rssi, after.rssi, ratio)
         csi = self._lerp_sequence(before.csi, after.csi, ratio)
+        channel = before.channel if before.channel == after.channel else None
+        band = before.band if before.band == after.band else None
         return WiFiMeasurement(
             timestamp=reference_time,
             access_point_id=access_point_id,
             rssi=rssi,
+            channel=channel,
+            band=band,
             csi=csi,
             metadata=None,
         )

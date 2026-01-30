@@ -87,6 +87,7 @@ class LocalWiFiCaptureAdapter:
         if csi_timestamp is not None:
             timestamp = csi_timestamp + self._config.clock_offset_seconds
         metadata = self._merge_metadata(scan_result)
+        channel, band = _infer_channel_band(scan_result.frequency_mhz)
 
         measurement: dict[str, object] = {
             "timestamp": timestamp,
@@ -94,6 +95,10 @@ class LocalWiFiCaptureAdapter:
             "rssi": scan_result.signal_dbm,
             "metadata": metadata,
         }
+        if channel is not None:
+            measurement["channel"] = channel
+        if band is not None:
+            measurement["band"] = band
         if csi_values is not None:
             measurement["csi"] = csi_values
         return measurement
@@ -305,3 +310,23 @@ def _parse_float(value: object, label: str) -> float:
         raise LocalWiFiCaptureError(
             f"Local Wi-Fi capture {label} value must be numeric."
         ) from exc
+
+
+def _infer_channel_band(
+    frequency_mhz: Optional[int],
+) -> Tuple[Optional[int], Optional[str]]:
+    if frequency_mhz is None:
+        return None, None
+    frequency = float(frequency_mhz)
+    if 2400 <= frequency <= 2500:
+        if frequency == 2484:
+            return 14, "2.4ghz"
+        channel = round((frequency - 2407) / 5)
+        return channel if channel > 0 else None, "2.4ghz"
+    if 5925 <= frequency <= 7125:
+        channel = round((frequency - 5950) / 5)
+        return channel if channel > 0 else None, "6ghz"
+    if 5000 <= frequency < 5925:
+        channel = round((frequency - 5000) / 5)
+        return channel if channel > 0 else None, "5ghz"
+    return None, None
