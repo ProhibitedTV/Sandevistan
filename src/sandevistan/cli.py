@@ -808,6 +808,50 @@ def _aggregate_ble_emitters(
     return [emitters[key] for key in sorted(emitters)]
 
 
+def _aggregate_wifi_band_summary(
+    measurements: Sequence[WiFiMeasurement],
+) -> dict[str, int]:
+    summary = {"2.4ghz": 0, "5ghz": 0, "6ghz": 0}
+    for measurement in measurements:
+        band = _resolve_wifi_band(measurement)
+        if band in summary:
+            summary[band] += 1
+    return summary
+
+
+def _resolve_wifi_band(measurement: WiFiMeasurement) -> Optional[str]:
+    if measurement.band:
+        return measurement.band
+    if measurement.channel is not None:
+        band = _band_from_channel(measurement.channel)
+        if band is not None:
+            return band
+    metadata = measurement.metadata
+    if isinstance(metadata, Mapping):
+        frequency = metadata.get("frequency_mhz")
+        if isinstance(frequency, (int, float)):
+            return _band_from_frequency(float(frequency))
+    return None
+
+
+def _band_from_channel(channel: int) -> Optional[str]:
+    if 1 <= channel <= 14:
+        return "2.4ghz"
+    if 32 <= channel <= 177:
+        return "5ghz"
+    return None
+
+
+def _band_from_frequency(frequency_mhz: float) -> Optional[str]:
+    if 2400 <= frequency_mhz <= 2500:
+        return "2.4ghz"
+    if 5925 <= frequency_mhz <= 7125:
+        return "6ghz"
+    if 5000 <= frequency_mhz < 5925:
+        return "5ghz"
+    return None
+
+
 def _build_sensor_health(batch: SyncBatch) -> list[dict[str, object]]:
     status = batch.status
     return [
@@ -844,6 +888,7 @@ def _emit_tick_ndjson(
         "tracks": [asdict(update) for update in updates],
         "emitters": _aggregate_ble_emitters(batch.fusion_input.ble),
         "sensor_health": _build_sensor_health(batch),
+        "band_summary": _aggregate_wifi_band_summary(batch.fusion_input.wifi),
     }
     if camera_frame is not None:
         payload["camera_frame"] = camera_frame
