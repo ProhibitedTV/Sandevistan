@@ -40,7 +40,7 @@ from .ingestion.ble import BLEAdvertisementScanner
 from .ingestion.ble_scanner import BleakScannerAdapter, BleakScannerConfig
 from .pipeline import FusionPipeline
 from .retention import RetentionScheduler
-from .sync import SynchronizationBuffer
+from .sync import SyncBatch, SynchronizationBuffer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -777,6 +777,79 @@ def _emit_ndjson(updates: Iterable[TrackState]) -> None:
         print(json.dumps(payload), flush=True)
 
 
+def _latest_timestamp(items: Sequence[object]) -> Optional[float]:
+    timestamps = [getattr(item, "timestamp", None) for item in items]
+    valid = [value for value in timestamps if isinstance(value, (float, int))]
+    if not valid:
+        return None
+    return float(max(valid))
+
+
+def _aggregate_ble_emitters(
+    measurements: Sequence[BLEMeasurement],
+) -> list[dict[str, object]]:
+    emitters: dict[str, dict[str, object]] = {}
+    for measurement in measurements:
+        emitter_key = measurement.device_id or measurement.hashed_identifier
+        if emitter_key is None:
+            continue
+        existing = emitters.get(emitter_key)
+        existing_last_seen = existing.get("last_seen") if existing else None
+        if existing is None or measurement.timestamp >= float(existing_last_seen or 0.0):
+            entry: dict[str, object] = {
+                "rssi": measurement.rssi,
+                "last_seen": measurement.timestamp,
+            }
+            if measurement.device_id is not None:
+                entry["device_id"] = measurement.device_id
+            else:
+                entry["emitter_id"] = measurement.hashed_identifier
+            emitters[emitter_key] = entry
+    return [emitters[key] for key in sorted(emitters)]
+
+
+def _build_sensor_health(batch: SyncBatch) -> list[dict[str, object]]:
+    status = batch.status
+    return [
+        {
+            "label": "wifi",
+            "status": "online" if not status.wifi_stale else "offline",
+            "last_seen": _latest_timestamp(batch.fusion_input.wifi),
+        },
+        {
+            "label": "vision",
+            "status": "online" if not status.vision_stale else "offline",
+            "last_seen": _latest_timestamp(batch.fusion_input.vision),
+        },
+        {
+            "label": "mmwave",
+            "status": "online" if not status.mmwave_stale else "offline",
+            "last_seen": _latest_timestamp(batch.fusion_input.mmwave),
+        },
+        {
+            "label": "ble",
+            "status": "online" if not status.ble_stale else "offline",
+            "last_seen": _latest_timestamp(batch.fusion_input.ble),
+        },
+    ]
+
+
+def _emit_tick_ndjson(
+    updates: Sequence[TrackState],
+    batch: SyncBatch,
+    *,
+    camera_frame: Optional[str] = None,
+) -> None:
+    payload: dict[str, object] = {
+        "tracks": [asdict(update) for update in updates],
+        "emitters": _aggregate_ble_emitters(batch.fusion_input.ble),
+        "sensor_health": _build_sensor_health(batch),
+    }
+    if camera_frame is not None:
+        payload["camera_frame"] = camera_frame
+    print(json.dumps(payload), flush=True)
+
+
 def _configure_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -885,6 +958,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default="INFO",
         help="Logging level (default: INFO).",
     )
+    parser.add_argument(
+        "--emit-legacy-tracks",
+        action="store_true",
+        help="Emit bare track updates per line for legacy consumers.",
+    )
     args = parser.parse_args(argv)
 
     _configure_logging(args.log_level)
@@ -911,8 +989,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 iterations += 1
             else:
                 updates = pipeline.fuse(batch.fusion_input)
-                if updates:
-                    _emit_ndjson(updates)
+                if args.emit_legacy_tracks:
+                    if updates:
+                        _emit_ndjson(updates)
+                else:
+                    _emit_tick_ndjson(updates, batch)
                 if pipeline.retention_scheduler:
                     pipeline.retention_scheduler.run_once(
                         reference_time=batch.status.reference_time,
