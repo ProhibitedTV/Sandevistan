@@ -48,7 +48,13 @@ class FusionPipeline:
     _lost_misses: int = field(default=2, init=False, repr=False)
     _terminate_misses: int = field(default=4, init=False, repr=False)
 
-    def fuse(self, measurements: FusionInput) -> List[TrackState]:
+    def fuse(
+        self,
+        measurements: FusionInput,
+        *,
+        aligned: bool = False,
+        reference_time: Optional[float] = None,
+    ) -> List[TrackState]:
         """
         Fuse Wi-Fi and vision measurements into track states.
 
@@ -62,6 +68,17 @@ class FusionPipeline:
             and not measurements.ble
         ):
             return []
+
+        if aligned:
+            if reference_time is None:
+                reference_time = self._reference_time_from_input(measurements)
+            return self._fuse_aligned(
+                measurements.wifi,
+                measurements.vision,
+                measurements.mmwave,
+                measurements.ble,
+                reference_time,
+            )
 
         synced_wifi, synced_vision, synced_mmwave, synced_ble, reference_time = self._synchronize(
             measurements.wifi,
@@ -81,19 +98,10 @@ class FusionPipeline:
         """
         Fuse already-aligned measurements using the provided reference time.
         """
-        if (
-            not measurements.wifi
-            and not measurements.vision
-            and not measurements.mmwave
-            and not measurements.ble
-        ):
-            return []
-        return self._fuse_aligned(
-            measurements.wifi,
-            measurements.vision,
-            measurements.mmwave,
-            measurements.ble,
-            reference_time,
+        return self.fuse(
+            measurements,
+            aligned=True,
+            reference_time=reference_time,
         )
 
     def _fuse_aligned(
