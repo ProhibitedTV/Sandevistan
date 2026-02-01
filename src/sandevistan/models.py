@@ -42,10 +42,9 @@ class MmWaveMeasurement:
 class BLEMeasurement:
     timestamp: float
     rssi: float
-    device_id: Optional[str] = None
-    hashed_identifier: Optional[str] = None
     channel: Optional[int] = None
     manufacturer_data: Optional[dict] = None
+    adapter_id: Optional[str] = None
 
 
 def validate_mmwave_measurement(measurement: MmWaveMeasurement) -> None:
@@ -65,8 +64,6 @@ def validate_mmwave_measurement(measurement: MmWaveMeasurement) -> None:
 
 
 def validate_ble_measurement(measurement: BLEMeasurement) -> None:
-    if not measurement.device_id and not measurement.hashed_identifier:
-        raise ValueError("BLE measurement must include device_id or hashed_identifier.")
     if measurement.timestamp < 0:
         raise ValueError("BLE timestamp must be non-negative.")
     if not math.isfinite(measurement.rssi):

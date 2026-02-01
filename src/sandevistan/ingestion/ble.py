@@ -32,25 +32,16 @@ def parse_ble_measurements(
 ) -> List[BLEMeasurement]:
     """Parse raw BLE advertisement payloads into BLEMeasurement objects."""
     measurements: List[BLEMeasurement] = []
-    last_timestamp_by_device: dict[str, float] = {}
+    last_timestamp: Optional[float] = None
 
     for idx, raw in enumerate(raw_measurements):
         timestamp = _require_float(raw, "timestamp", idx)
         rssi = _require_float(raw, "rssi", idx, timestamp)
-        device_id = _optional_str(raw.get("device_id"))
-        hashed_identifier = _optional_str(raw.get("hashed_identifier"))
-        if not device_id and not hashed_identifier:
-            raise BLEIngestionError(
-                f"BLE measurement #{idx} missing device_id or hashed_identifier."
-            )
+        adapter_id = _optional_str(raw.get("adapter_id") or raw.get("adapter"))
 
-        channel = _optional_channel(raw.get("channel"), device_id, hashed_identifier)
-        manufacturer_data = _normalize_manufacturer_data(
-            raw.get("manufacturer_data"), device_id, hashed_identifier
-        )
+        channel = _optional_channel(raw.get("channel"), adapter_id)
+        manufacturer_data = _normalize_manufacturer_data(raw.get("manufacturer_data"), adapter_id)
 
-        device_key = device_id or hashed_identifier or "unknown"
-        last_timestamp = last_timestamp_by_device.get(device_key)
         if last_timestamp is not None and timestamp < last_timestamp:
             raise BLEIngestionError(
                 _format_message(
@@ -58,25 +49,24 @@ def parse_ble_measurements(
                         "Timestamp out of order for BLE measurement; "
                         f"previous timestamp was {last_timestamp:.3f}."
                     ),
-                    device_key,
+                    adapter_id or "scan",
                     timestamp,
                 )
             )
-        last_timestamp_by_device[device_key] = timestamp
+        last_timestamp = timestamp
 
         measurement = BLEMeasurement(
             timestamp=timestamp,
             rssi=rssi,
-            device_id=device_id,
-            hashed_identifier=hashed_identifier,
             channel=channel,
             manufacturer_data=manufacturer_data,
+            adapter_id=adapter_id,
         )
         try:
             validate_ble_measurement(measurement)
         except ValueError as exc:
             raise BLEIngestionError(
-                _format_message(str(exc), device_key, timestamp)
+                _format_message(str(exc), adapter_id or "scan", timestamp)
             ) from exc
 
         measurements.append(measurement)
@@ -114,8 +104,7 @@ def _optional_str(value: object) -> Optional[str]:
 
 def _optional_channel(
     value: object,
-    device_id: Optional[str],
-    hashed_identifier: Optional[str],
+    adapter_id: Optional[str],
 ) -> Optional[int]:
     if value is None:
         return None
@@ -125,7 +114,7 @@ def _optional_channel(
         raise BLEIngestionError(
             _format_message(
                 f"Invalid channel value; received {value!r}.",
-                device_id or hashed_identifier or "unknown",
+                adapter_id or "scan",
                 "unknown",
             )
         )
@@ -134,8 +123,7 @@ def _optional_channel(
 
 def _normalize_manufacturer_data(
     value: object,
-    device_id: Optional[str],
-    hashed_identifier: Optional[str],
+    adapter_id: Optional[str],
 ) -> Optional[dict]:
     if value is None:
         return None
@@ -155,14 +143,14 @@ def _normalize_manufacturer_data(
     raise BLEIngestionError(
         _format_message(
             "manufacturer_data must be a mapping or bytes-like payload when provided.",
-            device_id or hashed_identifier or "unknown",
+            adapter_id or "scan",
             "unknown",
         )
     )
 
 
-def _format_message(message: str, device_id: object, timestamp: object) -> str:
+def _format_message(message: str, source: object, timestamp: object) -> str:
     return (
         f"BLE ingestion error: {message} "
-        f"(device_id={device_id}, timestamp={timestamp})."
+        f"(source={source}, timestamp={timestamp})."
     )

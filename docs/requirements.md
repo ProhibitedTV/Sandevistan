@@ -11,8 +11,8 @@ This project targets **indoor localization and tracking** of consenting particip
 - Wi-Fi measurements: timestamped signal strength / channel state information.
 - Vision detections: timestamped bounding boxes and optional pose/keypoint data.
 - mmWave events: timestamped presence/motion indicators with optional range/angle metadata.
-- BLE advertisements: timestamped RSSI measurements with optional device identifiers and
-  manufacturer metadata.
+- BLE advertisements: timestamped RSSI measurements with anonymized, aggregated scan data
+  and optional manufacturer metadata (no device identifiers are stored).
 - Spatial configuration: a coordinate system, floor plan dimensions, and sensor placements,
   including mmWave sensor positions/orientations for converting range/angle readings into
   world-space coordinates.
@@ -48,6 +48,8 @@ This project targets **indoor localization and tracking** of consenting particip
   connections, and measurements are limited to nearby devices advertising on channels
   37–39. RSSI values can fluctuate due to interference, body absorption, and antenna
   orientation, so BLE data should be treated as a coarse proximity signal.
+- BLE ingestion is anonymized and aggregated by scan source; device identifiers are not
+  retained in stored measurements or outputs.
 - BLE emitter location is only approximate; room-scale proximity is typical, and precise
   positioning generally requires dense receiver placement, frequent advertisements, and
   favorable RF conditions.
@@ -142,7 +144,7 @@ Permissions and runtime notes:
         "adapter_name": "ble-scanner-01",
         "scan_interval_seconds": 1.0,
         "measurements": [
-          {"timestamp": 1700000000.0, "rssi": -42, "device_id": "demo-tag-01"}
+          {"timestamp": 1700000000.0, "rssi": -42}
         ]
       },
       {
@@ -151,7 +153,6 @@ Permissions and runtime notes:
         "scan_interval_seconds": 2.0,
         "adapter_settings": {
           "scan_timeout_seconds": 1.5,
-          "include_hashed_identifier": true,
           "offline": false,
           "offline_payloads": []
         }

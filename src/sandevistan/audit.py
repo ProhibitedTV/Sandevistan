@@ -18,8 +18,7 @@ class ConsentStatus:
 @dataclass(frozen=True)
 class ConsentRecord:
     status: str
-    participant_id: Optional[str] = None
-    session_id: Optional[str] = None
+    session_token: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -27,8 +26,7 @@ class ConsentStore(Protocol):
     def get_consent(
         self,
         *,
-        participant_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_token: Optional[str] = None,
     ) -> Optional[ConsentRecord]:
         ...
 
@@ -43,13 +41,10 @@ class InMemoryConsentStore:
     def get_consent(
         self,
         *,
-        participant_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_token: Optional[str] = None,
     ) -> Optional[ConsentRecord]:
         for record in reversed(self._records):
-            if participant_id and record.participant_id != participant_id:
-                continue
-            if session_id and record.session_id != session_id:
+            if session_token and record.session_token != session_token:
                 continue
             return record
         return None
@@ -128,22 +123,19 @@ class AuditLogger:
         self,
         *,
         status: str,
-        participant_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_token: Optional[str] = None,
     ) -> ConsentRecord:
         if status not in {ConsentStatus.GRANTED, ConsentStatus.REVOKED}:
             raise ValueError(f"Unknown consent status: {status}")
         record = ConsentRecord(
             status=status,
-            participant_id=participant_id,
-            session_id=session_id,
+            session_token=session_token,
         )
         self._consent_store.set_consent(record)
         self._logger.info(
             "consent_record",
             extra={
-                "participant_id": participant_id,
-                "session_id": session_id,
+                "session_token": session_token,
                 "status": status,
                 "timestamp": record.timestamp.isoformat(),
             },
@@ -153,12 +145,10 @@ class AuditLogger:
     def require_consent(
         self,
         *,
-        participant_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        session_token: Optional[str] = None,
     ) -> ConsentRecord:
         record = self._consent_store.get_consent(
-            participant_id=participant_id,
-            session_id=session_id,
+            session_token=session_token,
         )
         if record is None:
             raise ConsentError("Consent record missing.")
