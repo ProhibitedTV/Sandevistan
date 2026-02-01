@@ -46,11 +46,13 @@ BLE adverts     -> BLE Ingestion    ->          |
 - **Wi-Fi measurement schema**: `{timestamp, ap_id, rssi, csi?, metadata}`
 - **Vision detection schema**: `{timestamp, camera_id, bbox, confidence, keypoints?}`
 - **mmWave event schema**: `{timestamp, sensor_id, confidence, event_type, range_meters?, angle_radians?}`
+- **BLE measurement schema**: `{timestamp, rssi, channel?, manufacturer_data?, adapter_id?}` (anonymized;
+  no per-device identifiers stored)
 - **Fusion output**: `{timestamp, track_id, position, velocity?, uncertainty, alert_tier}`
 - **Audit log schema**
   - **Sensor provenance log**: `{track_id, timestamp, sources, captured_at}`
   - **Track update log**: `{track_id, timestamp, sources, captured_at}`
-  - **Consent record**: `{participant_id?, session_id?, status, timestamp}`
+  - **Consent record**: `{session_token?, status, timestamp}`
 
 ## Alert tiers
 The fusion pipeline assigns an `alert_tier` to each track update using recent signal context:

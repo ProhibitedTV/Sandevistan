@@ -765,9 +765,6 @@ def _parse_ble_sources(payload: Mapping[str, object]) -> Optional[_MultiBleSourc
                 ),
                 offline=bool(adapter_settings.get("offline", False)),
                 offline_payloads=normalized_offline_payloads,
-                include_hashed_identifier=bool(
-                    adapter_settings.get("include_hashed_identifier", True)
-                ),
             )
             adapters.append(
                 _BleScannerSource(
@@ -802,9 +799,7 @@ def _aggregate_ble_emitters(
 ) -> list[dict[str, object]]:
     emitters: dict[str, dict[str, object]] = {}
     for measurement in measurements:
-        emitter_key = measurement.device_id or measurement.hashed_identifier
-        if emitter_key is None:
-            continue
+        emitter_key = _ble_source_label(measurement.adapter_id)
         existing = emitters.get(emitter_key)
         existing_last_seen = existing.get("last_seen") if existing else None
         if existing is None or measurement.timestamp >= float(existing_last_seen or 0.0):
@@ -812,12 +807,15 @@ def _aggregate_ble_emitters(
                 "rssi": measurement.rssi,
                 "last_seen": measurement.timestamp,
             }
-            if measurement.device_id is not None:
-                entry["device_id"] = measurement.device_id
-            else:
-                entry["emitter_id"] = measurement.hashed_identifier
+            entry["emitter_id"] = emitter_key
             emitters[emitter_key] = entry
     return [emitters[key] for key in sorted(emitters)]
+
+
+def _ble_source_label(adapter_id: Optional[str]) -> str:
+    if adapter_id:
+        return f"ble:adapter:{adapter_id}"
+    return "ble:scan"
 
 
 def _aggregate_wifi_band_summary(
@@ -925,12 +923,12 @@ def _parse_audit_config(
     for idx, entry in enumerate(consent_entries):
         entry_map = _require_mapping(entry, f"audit.consent_records[{idx}]")
         status = _require_non_empty(entry_map.get("status"), "audit.consent_records.status")
-        participant_id = _optional_str(entry_map.get("participant_id"))
-        session_id = _optional_str(entry_map.get("session_id"))
+        session_token = _optional_str(
+            entry_map.get("session_token") or entry_map.get("session_id")
+        )
         audit_logger.record_consent(
             status=status,
-            participant_id=participant_id,
-            session_id=session_id,
+            session_token=session_token,
         )
     require_consent = bool(payload.get("require_consent", False))
     return audit_logger, require_consent

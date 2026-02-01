@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-import hashlib
 import time
 import uuid
 from typing import Iterable, List, Mapping, Optional, Sequence
@@ -25,7 +24,6 @@ class BleakScannerConfig:
     scan_timeout_seconds: float = 2.0
     offline: bool = False
     offline_payloads: Sequence[Mapping[str, object]] = field(default_factory=tuple)
-    include_hashed_identifier: bool = True
 
 
 class BleakScannerAdapter:
@@ -65,15 +63,8 @@ class BleakScannerAdapter:
                 )
             entry = dict(item)
             entry.setdefault("timestamp", time.time())
-
-            device_id = _optional_str(entry.get("device_id"))
-            hashed_identifier = _optional_str(entry.get("hashed_identifier"))
-            if not device_id and not hashed_identifier:
-                raise BleakScannerAdapterError(
-                    f"Offline BLE payload #{idx} must include device_id or hashed_identifier."
-                )
-            if self._config.include_hashed_identifier and device_id and not hashed_identifier:
-                entry["hashed_identifier"] = _hash_identifier(device_id)
+            entry.pop("device_id", None)
+            entry.pop("hashed_identifier", None)
             entry.setdefault("adapter", self._config.adapter_name)
             if "rssi" not in entry:
                 raise BleakScannerAdapterError(
@@ -87,27 +78,19 @@ class BleakScannerAdapter:
         timestamp = time.time()
         for idx, item in enumerate(discoveries):
             device, advertisement = _split_discovery(item)
-            device_id = _resolve_device_identifier(device, advertisement)
-            if not device_id:
-                raise BleakScannerAdapterError(
-                    f"BLE discovery #{idx} missing device identifier."
-                )
             rssi = _resolve_rssi(device, advertisement)
             if rssi is None:
                 raise BleakScannerAdapterError(
-                    f"BLE discovery #{idx} missing RSSI value for {device_id}."
+                    f"BLE discovery #{idx} missing RSSI value."
                 )
             entry: dict[str, object] = {
                 "timestamp": timestamp,
                 "rssi": rssi,
-                "device_id": device_id,
                 "adapter": self._config.adapter_name,
             }
             raw_payload = _resolve_raw_advertisement_payload(device, advertisement)
             if raw_payload is not None:
                 entry["manufacturer_data"] = raw_payload
-            if self._config.include_hashed_identifier:
-                entry["hashed_identifier"] = _hash_identifier(device_id)
             normalized.append(entry)
         return normalized
 
@@ -116,29 +99,6 @@ def _split_discovery(item: object) -> tuple[object, Optional[object]]:
     if isinstance(item, tuple) and len(item) == 2:
         return item[0], item[1]
     return item, None
-
-
-def _optional_str(value: object) -> Optional[str]:
-    if isinstance(value, str) and value:
-        return value
-    return None
-
-
-def _resolve_device_identifier(device: object, advertisement: Optional[object]) -> Optional[str]:
-    for candidate in (
-        getattr(device, "address", None),
-        getattr(device, "name", None),
-        getattr(advertisement, "local_name", None),
-    ):
-        identifier = _optional_str(candidate)
-        if identifier:
-            return identifier
-    metadata = getattr(device, "metadata", None)
-    if isinstance(metadata, Mapping):
-        identifier = _optional_str(metadata.get("identifier"))
-        if identifier:
-            return identifier
-    return None
 
 
 def _resolve_rssi(device: object, advertisement: Optional[object]) -> Optional[float]:
@@ -248,6 +208,3 @@ def _coerce_bytes(value: object) -> Optional[bytes]:
             return None
     return None
 
-
-def _hash_identifier(identifier: str) -> str:
-    return hashlib.sha256(identifier.encode("utf-8")).hexdigest()

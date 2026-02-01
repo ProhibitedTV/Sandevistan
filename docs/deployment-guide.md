@@ -73,7 +73,7 @@ an `audit` block with the options below:
     "consent_records": [
       {
         "status": "granted",
-        "participant_id": "demo-user-001"
+        "session_token": "demo-session-001"
       }
     ]
   }
@@ -84,7 +84,7 @@ an `audit` block with the options below:
 - `audit.require_consent`: when `true`, the pipeline enforces that consent records exist before
   logging updates; when `false`, audit logs are captured without consent checks.
 - `audit.consent_records`: optional seed data for demo or bootstrap flows. Each entry can include
-  `status` (`granted` or `revoked`), plus optional `participant_id` and `session_id`.
+  `status` (`granted` or `revoked`), plus an optional `session_token`.
 
 ## Local network constraints
 - **On-prem only**: All processing must stay within a trusted local network. Avoid internet egress for

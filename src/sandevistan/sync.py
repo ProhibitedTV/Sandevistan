@@ -228,7 +228,7 @@ class SynchronizationBuffer:
 
     @staticmethod
     def _ble_identifier(measurement: BLEMeasurement) -> str:
-        return measurement.device_id or measurement.hashed_identifier or "unknown"
+        return measurement.adapter_id or "scan"
 
     def _match_measurement(
         self,

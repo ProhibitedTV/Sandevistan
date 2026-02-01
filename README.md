@@ -14,6 +14,7 @@ This repository contains an early-stage prototype framework inspired by the *San
 ## Limitations
 - Wi-Fi sensing is environment-dependent and can degrade with interference, sparse access point layouts, or low sampling rates.
 - mmWave sensors provide short-range, coarse presence/motion cues that can be affected by multipath and occlusions.
+- BLE scans are aggregated and anonymized by scanner source; device identifiers are not stored.
 - All RF-based measurements are probabilistic and should be treated as corroborating evidence, not guarantees.
 
 ## Wearable constraints
@@ -97,8 +98,7 @@ track updates as NDJSON (one JSON object per track update).
            "adapter_name": "ble-scanner-01",
            "scan_interval_seconds": 1.0,
            "adapter_settings": {
-             "scan_timeout_seconds": 2.0,
-             "include_hashed_identifier": true
+             "scan_timeout_seconds": 2.0
            }
          }
        ]

@@ -217,8 +217,10 @@ class FusionPipeline:
                 sources.append(source)
                 seen.add(source)
         for measurement in ble:
-            identifier = measurement.device_id or measurement.hashed_identifier or "unknown"
-            source = f"ble:{identifier}"
+            if measurement.adapter_id:
+                source = f"ble:adapter:{measurement.adapter_id}"
+            else:
+                source = "ble:scan"
             if source not in seen:
                 sources.append(source)
                 seen.add(source)
